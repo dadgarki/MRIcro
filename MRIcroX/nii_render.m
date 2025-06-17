@@ -15,6 +15,35 @@
 //#include <GLKit/GLKMatrix4.h>
 #import <Foundation/Foundation.h>
 
+// Function to read a file into a string
+char* read_file(const char* filename) {
+    FILE* file = fopen(filename, "rb"); // Open in binary mode
+    if (!file) {
+        perror("Failed to open file");
+        return NULL;
+    }
+
+    // Get file size
+    fseek(file, 0, SEEK_END);
+    long file_size = ftell(file);
+    fseek(file, 0, SEEK_SET);
+
+    // Allocate buffer for the file content
+    char* buffer = (char*)malloc(file_size + 1); // +1 for the null terminator
+    if (!buffer) {
+        perror("Failed to allocate memory");
+        fclose(file);
+        return NULL;
+    }
+
+    // Read file contents into buffer
+    fread(buffer, 1, file_size, file);
+    buffer[file_size] = '\0'; // Null-terminate the string
+
+    fclose(file); // Close the file
+    return buffer;
+}
+
 GLuint initVertFrag(const char *vert, const char *frag)
 {
 #ifdef MY_DEBUG //from nii_io.h
@@ -95,28 +124,7 @@ const char *kBlurShaderFrag =
 "  gl_FragColor.a = samp* 0.125;"\
 "}";
 
-const char *kSobelShaderFrag =
-"uniform float coordZ, dX, dY, dZ;" \
-"uniform sampler3D intensityVol;" \
-"void main(void) {\n " \
-"  vec3 vx = vec3(gl_TexCoord[0].xy, coordZ);\n"\
-"  float TAR = texture3D(intensityVol,vx+vec3(+dX,+dY,+dZ)).a;\n"\
-"  float TAL = texture3D(intensityVol,vx+vec3(+dX,+dY,-dZ)).a;\n"\
-"  float TPR = texture3D(intensityVol,vx+vec3(+dX,-dY,+dZ)).a;\n"\
-"  float TPL = texture3D(intensityVol,vx+vec3(+dX,-dY,-dZ)).a;\n"\
-"  float BAR = texture3D(intensityVol,vx+vec3(-dX,+dY,+dZ)).a;\n"\
-"  float BAL = texture3D(intensityVol,vx+vec3(-dX,+dY,-dZ)).a;\n"\
-"  float BPR = texture3D(intensityVol,vx+vec3(-dX,-dY,+dZ)).a;\n"\
-"  float BPL = texture3D(intensityVol,vx+vec3(-dX,-dY,-dZ)).a;\n"\
-"  vec4 gradientSample;\n"\
-"  gradientSample.r =   BAR+BAL+BPR+BPL -TAR-TAL-TPR-TPL;\n"\
-"  gradientSample.g =  TPR+TPL+BPR+BPL -TAR-TAL-BAR-BAL;\n"\
-"  gradientSample.b =  TAL+TPL+BAL+BPL -TAR-TPR-BAR-BPR;\n"\
-"  gradientSample.a = (abs(gradientSample.r)+abs(gradientSample.g)+abs(gradientSample.b))*0.5;\n"\
-"  gradientSample.rgb = normalize(gradientSample.rgb);\n"\
-"  gradientSample.rgb =  (gradientSample.rgb * 0.5)+0.5;\n"\
-"  gl_FragColor = gradientSample;\n"\
-"}";
+char *kSobelShaderFrag = NULL;
 
 GLuint bindBlankGL(NII_PREFS* prefs) { //creates an empty texture in VRAM without requiring memory copy from RAM
     //later run glDeleteTextures(1,&oldHandle);
@@ -322,7 +330,13 @@ void performBlurSobel(NII_PREFS* prefs, bool isOverlay) {
     glDeleteFramebuffers(1,&frameBuffer);
 }*/
 
-void doShaderBlurSobel (NII_PREFS* prefs){
+void doShaderBlurSobel (NII_PREFS* prefs) {
+    if (kSobelShaderFrag == NULL) {
+        NSString * bundlePath = [[NSBundle mainBundle] resourcePath];
+        NSString *shaderPath = [bundlePath stringByAppendingPathComponent:@"sobel_shader.frag"];
+        kSobelShaderFrag = read_file(shaderPath.UTF8String);
+    }
+    
     const char *vert_empty ="";
     if (!prefs->advancedRender) return; //gradients only used by advanced rendering
     if ((!prefs->glslUpdateGradientsBG) &&  (!prefs->glslUpdateGradientsOverlay)) return;
@@ -457,207 +471,6 @@ void uniform4fv(const char* name, float v1, float v2, float v3, float v4, NII_PR
 " gl_Position = ftransform();\n"
 "}";*/
 
-const char *frag_advanced_CT =
-"#version 120\n"
-"varying vec3 vColor;\n"
-"uniform vec3 rayDir;\n"
-"uniform int overlays;\n"
-"uniform float stepSize, sliceSize;\n"
-"uniform vec3 lightPosition;\n"
-"uniform vec4 clipPlane;\n"
-"uniform sampler3D intensityVol, gradientVol, intensityOverlay, gradientOverlay;\n"
-"uniform float clipThick = 2.0;\n"
-"uniform vec3 textureSz = vec3(3.0, 2.0, 1.0);\n"
-"uniform float ambient = 0.8;\n"
-"uniform float diffuse = 0.3;\n"
-"uniform float specular = 0.1;\n"
-"uniform float shininess= 20.0;\n"
-"uniform float surfaceHardness = 0.75;//CT\n"
-"//uniform float backAlpha = 0.95;\n"
-"uniform float overlayClip = 0.0;\n"
-"uniform float overlayFuzzy = 0.5;\n"
-"uniform float overlayDepth = 0.3;\n"
-"vec3 GetBackPosition (vec3 startPosition) {\n"
-" vec3 invR = 1.0 / rayDir;\n"
-" vec3 tbot = invR * (vec3(0.0)-startPosition);\n"
-" vec3 ttop = invR * (vec3(1.0)-startPosition);\n"
-" vec3 tmax = max(ttop, tbot);\n"
-" vec2 t = min(tmax.xx, tmax.yz);\n"
-" return startPosition + (rayDir * min(t.x, t.y));\n"
-"}\n"
-"void fastPass (float len, vec3 dir, sampler3D vol, inout vec4 samplePos){\n"
-"    vec4 deltaDir = vec4(dir.xyz * max(stepSize, sliceSize * 1.95), max(stepSize, sliceSize * 1.95));\n"
-"    while  (texture3D(intensityVol,samplePos.xyz).a < 0.01) {\n"
-"        samplePos += deltaDir;\n"
-"        if (samplePos.a > len) return;\n"
-"    }\n"
-"    samplePos -= deltaDir;\n"
-"}\n"
-"vec4 applyClip(vec3 dir, inout vec4 samplePos, inout float len) {\n"
-"    float cdot = dot(dir,clipPlane.xyz);\n"
-"    if  ((clipPlane.a > 1.0) || (cdot == 0.0)) return samplePos;\n"
-"    bool frontface = (cdot > 0.0);\n"
-"    float dis = (-clipPlane.a - dot(clipPlane.xyz, samplePos.xyz-0.5)) / cdot;\n"
-"    float  disBackFace = (-(clipPlane.a-clipThick) - dot(clipPlane.xyz, samplePos.xyz-0.5)) / cdot;\n"
-"    if (((frontface) && (dis >= len)) || ((!frontface) && (dis <= 0.0))) {\n"
-"        samplePos.a = len + 1.0;\n"
-"        return samplePos;\n"
-"    }\n"
-"    if (frontface) {\n"
-"        dis = max(0.0, dis);\n"
-"        samplePos = vec4(samplePos.xyz+dir * dis, dis);\n"
-"        len = min(disBackFace, len);\n"
-"    }\n"
-"    if (!frontface) {\n"
-"        len = min(dis, len);\n"
-"        disBackFace = max(0.0, disBackFace);\n"
-"        samplePos = vec4(samplePos.xyz+dir * disBackFace, disBackFace);\n"
-"    }\n"
-"    return samplePos;\n"
-"}\n"
-"void main() {\n"
-"    vec3 start = vColor;//gl_TexCoord[1].xyz;\n"
-"    vec3 backPosition = GetBackPosition(start);\n"
-"    vec3 dir = backPosition - start;\n"
-"    float len = length(dir);\n"
-"    dir = normalize(dir);\n"
-"    vec4 deltaDir = vec4(dir.xyz * stepSize, stepSize);\n"
-"    vec4 gradSample, colorSample;\n"
-"    float bgNearest = len; //assume no hit\n"
-"    vec4 colAcc = vec4(0.0,0.0,0.0,0.0);\n"
-"    vec4 prevGrad = vec4(0.0,0.0,0.0,0.0);\n"
-"    //background pass\n"
-"    float noClipLen = len;\n"
-"    vec4 samplePos = vec4(start.xyz, 0.0);\n"
-"    vec4 clipPos = applyClip(dir, samplePos, len);\n"
-"    float stepSizeX2 = samplePos.a + (stepSize * 2.0);\n"
-"    float opacityCorrection = stepSize/sliceSize;\n"
-"    //fast pass - optional\n"
-"    fastPass (len, dir, intensityVol, samplePos);\n"
-"    if ((textureSz.x < 1) || ((samplePos.a > len) && ( overlays < 1 ))) { //no hit\n"
-"        //colAcc = vec4(0,0.0,1.0,1.0);//background\n"
-"        gl_FragColor = colAcc;\n"
-"        return;\n"
-"    }\n"
-"    if (samplePos.a < clipPos.a) {\n"
-"        samplePos = clipPos;\n"
-"        bgNearest = clipPos.a;\n"
-"        float stepSizeX2 = samplePos.a + (stepSize * 2.0);\n"
-"        while (samplePos.a <= stepSizeX2) {\n"
-"            colorSample = texture3D(intensityVol,samplePos.xyz);\n"
-"            colorSample.a = 1.0-pow((1.0 - colorSample.a), opacityCorrection);\n"
-"            colorSample.a = clamp(colorSample.a*3.0,0.0, 1.0);\n"
-"            colorSample.rgb *= colorSample.a;\n"
-"            colAcc= (1.0 - colAcc.a) * colorSample + colAcc;\n"
-"            samplePos += deltaDir;\n"
-"        }\n"
-"    }\n"
-"    //end fastpass - optional\n"
-"    float ran = fract(sin(gl_FragCoord.x * 12.9898 + gl_FragCoord.y * 78.233) * 43758.5453);\n"
-"    samplePos += deltaDir * ran; //jitter ray\n"
-"    deltaDir = vec4(dir.xyz * stepSize, stepSize);\n"
-"    vec3 defaultDiffuse = vec3(0.5, 0.5, 0.5);\n"
-"    vec3 lightPositionN = normalize(lightPosition);\n"
-"    vec4 gradMax  = vec4(0.0,0.0,0.0,0.0); //CT\n"
-"    vec4 colorMax  = vec4(0.0,0.0,0.0,0.0); //CT\n"
-"    while (samplePos.a <= len) {\n"
-"        colorSample = texture3D(intensityVol,samplePos.xyz);\n"
-"        if (colorSample.a > 0.0) {\n"
-"            colorSample.a = 1.0-pow((1.0 - colorSample.a), opacityCorrection);\n"
-"            bgNearest = min(samplePos.a,bgNearest);\n"
-"            gradSample = texture3D(gradientVol,samplePos.xyz);\n"
-"            gradSample.rgb = normalize(gradSample.rgb*2.0 - 1.0);\n"
-"            if (gradSample.a > gradMax.a) gradMax = gradSample; //CT\n"
-"            if (colorSample.a > colorMax.a) colorMax = colorSample; //CT\n"
-"            if (gradSample.a < prevGrad.a)\n"
-"                gradSample.rgb = prevGrad.rgb;\n"
-"            prevGrad = gradSample;\n"
-"            vec3 a = colorSample.rgb * ambient;\n"
-"            vec3 d = max(dot(gradSample.rgb, lightPositionN), 0.0) * colorSample.rgb * diffuse;\n"
-"            float s =   specular * pow(max(dot(reflect(lightPositionN, gradSample.rgb), dir), 0.0), shininess);\n"
-"            colorSample.rgb = (a + d + s) * colorSample.a;\n"
-"            colAcc= (1.0 - colAcc.a) * colorSample + colAcc;\n"
-"            if ( colAcc.a > 0.95 )\n"
-"                break;\n"
-"        }\n"
-"        samplePos += deltaDir;\n"
-"    } //while samplePos.a < len\n"
-"    colAcc.a = colAcc.a/0.95;\n"
-" //CT\n"
-" if ((samplePos.a < len) && (gradMax.a > 0.02) && (bgNearest > clipPos.a)) {\n"
-"        float ambientCT = ambient * 0.65;\n"
-"        float lightNormDot = dot(gradMax.rgb, lightPositionN);\n"
-"        vec3 a = colorMax.rgb * ambientCT;\n"
-"        vec3 d = max(lightNormDot, 0.0) * colorMax.rgb * diffuse;\n"
-"        float s =   specular * pow(max(dot(reflect(lightPositionN, gradMax.rgb), dir), 0.0), shininess);\n"
-"        colorMax.rgb = a + d + s;\n"
-"        colAcc.rgb = mix(colAcc.rgb, colorMax.rgb,  surfaceHardness);\n"
-" }\n"
-"    //colAcc.a *= backAlpha;\n"
-"    if ( overlays < 1 ) {\n"
-"        gl_FragColor = colAcc;\n"
-"        return;\n"
-"    }\n"
-"    //overlay pass\n"
-"    vec4 overAcc = vec4(0.0,0.0,0.0,0.0);\n"
-"    prevGrad = vec4(0.0,0.0,0.0,0.0);\n"
-"    if (overlayClip > 0)\n"
-"        samplePos = clipPos;\n"
-"    else {\n"
-"        len = noClipLen;\n"
-"        samplePos = vec4(start.xyz +deltaDir.xyz* (fract(sin(gl_FragCoord.x * 12.9898 + gl_FragCoord.y * 78.233) * 43758.5453)), 0.0);\n"
-"    }\n"
-"    //fast pass - optional\n"
-"    clipPos = samplePos;\n"
-"    fastPass (len, dir, intensityOverlay, samplePos);\n"
-"    if (samplePos.a > len) { //no hit\n"
-"        gl_FragColor = colAcc;\n"
-"        return;\n"
-"    }\n"
-"    if (samplePos.a < clipPos.a)\n"
-"        samplePos = clipPos;\n"
-"    //end fastpass - optional\n"
-"    float overFarthest = len;\n"
-"    while (samplePos.a <= len) {\n"
-"        colorSample = texture3D(intensityOverlay,samplePos.xyz);\n"
-"        if (colorSample.a > 0.00) {\n"
-"            if (overAcc.a < 0.3)\n"
-"                overFarthest = samplePos.a;\n"
-"            colorSample.a = 1.0-pow((1.0 - colorSample.a), stepSize/sliceSize);\n"
-"            colorSample.a *=  overlayFuzzy;\n"
-"            vec3 a = colorSample.rgb * ambient;\n"
-"            float s =  0;\n"
-"            vec3 d = vec3(0.0, 0.0, 0.0);\n"
-"            //gradient based lighting http://www.mccauslandcenter.sc.edu/mricrogl/gradients\n"
-"            gradSample = texture3D(gradientOverlay,samplePos.xyz); //interpolate gradient direction and magnitude\n"
-"            gradSample.rgb = normalize(gradSample.rgb*2.0 - 1.0);\n"
-"            //reusing Normals http://www.marcusbannerman.co.uk/articles/VolumeRendering.html\n"
-"            if (gradSample.a < prevGrad.a)\n"
-"                gradSample.rgb = prevGrad.rgb;\n"
-"            prevGrad = gradSample;\n"
-"            float lightNormDot = dot(gradSample.rgb, lightPosition);\n"
-"            d = max(lightNormDot, 0.0) * colorSample.rgb * diffuse;\n"
-"            s =   specular * pow(max(dot(reflect(lightPosition, gradSample.rgb), dir), 0.0), shininess);\n"
-"            colorSample.rgb = a + d + s;\n"
-"            colorSample.rgb *= colorSample.a;\n"
-"            overAcc= (1.0 - overAcc.a) * colorSample + overAcc;\n"
-"            if (overAcc.a > 0.95 )\n"
-"                break;\n"
-"        }\n"
-"        samplePos += deltaDir;\n"
-"    } //while samplePos.a < len\n"
-"    overAcc.a = overAcc.a/0.95;\n"
-"    float overMix = overAcc.a;\n"
-"    if (((overFarthest) > bgNearest) && (colAcc.a > 0.0)) { //background (partially) occludes overlay\n"
-"        float dx = (overFarthest - bgNearest)/1.73;\n"
-"        dx = colAcc.a * pow(dx, overlayDepth);\n"
-"        overMix *= 1.0 - dx;\n"
-"    }\n"
-"    colAcc.rgb = mix(colAcc.rgb, overAcc.rgb, overMix);\n"
-"    colAcc.a = max(colAcc.a, overAcc.a);\n"
-"    gl_FragColor = colAcc;\n"
-"}";
-
 const char *vert_default =
 "#version 120\n"
 "//varying vec3 TexCoord1;\n"
@@ -671,355 +484,26 @@ const char *vert_default =
 " //TexCoord1 = gl_TexCoord[1].rgb; //gl_Vertex.rgb;\n"
 "}\n";
 
-const char *frag_advanced_MR =
-"#version 120\n"
-"varying vec3 vColor;\n"
-"uniform vec3 rayDir;\n"
-"uniform int overlays;\n"
-"uniform float stepSize, sliceSize;\n"
-"uniform vec3 lightPosition;\n"
-"uniform vec4 clipPlane;\n"
-"uniform sampler3D intensityVol, gradientVol, intensityOverlay, gradientOverlay;\n"
-"uniform float clipThick = 2.0;\n"
-"uniform vec3 textureSz = vec3(3.0, 2.0, 1.0);\n"
-"uniform float ambient = 0.8;\n"
-"uniform float diffuse = 0.3;\n"
-"uniform float specular = 0.1;\n"
-"uniform float shininess= 20.0;\n"
-"//uniform float backAlpha = 0.95;\n"
-"uniform float overlayClip = 0.0;\n"
-"uniform float overlayFuzzy = 0.5;\n"
-"uniform float overlayDepth = 0.3;\n"
-"vec3 GetBackPosition (vec3 startPosition) {\n"
-" vec3 invR = 1.0 / rayDir;\n"
-" vec3 tbot = invR * (vec3(0.0)-startPosition);\n"
-" vec3 ttop = invR * (vec3(1.0)-startPosition);\n"
-" vec3 tmax = max(ttop, tbot);\n"
-" vec2 t = min(tmax.xx, tmax.yz);\n"
-" return startPosition + (rayDir * min(t.x, t.y));\n"
-"}\n"
-"void fastPass (float len, vec3 dir, sampler3D vol, inout vec4 samplePos){\n"
-"    vec4 deltaDir = vec4(dir.xyz * max(stepSize, sliceSize * 1.95), max(stepSize, sliceSize * 1.95));\n"
-"    //samplePos.a = 0.0;\n"
-"    while  (texture3D(intensityVol,samplePos.xyz).a < 0.01) {\n"
-"        samplePos += deltaDir;\n"
-"        if (samplePos.a > len) return;\n"
-"    }\n"
-"    samplePos -= deltaDir;\n"
-"}\n"
-"vec4 applyClip(vec3 dir, inout vec4 samplePos, inout float len) {\n"
-"    float cdot = dot(dir,clipPlane.xyz);\n"
-"    if  ((clipPlane.a > 1.0) || (cdot == 0.0)) return samplePos;\n"
-"    bool frontface = (cdot > 0.0);\n"
-"    float dis = (-clipPlane.a - dot(clipPlane.xyz, samplePos.xyz-0.5)) / cdot;\n"
-"    float  disBackFace = (-(clipPlane.a-clipThick) - dot(clipPlane.xyz, samplePos.xyz-0.5)) / cdot;\n"
-"    if (((frontface) && (dis >= len)) || ((!frontface) && (dis <= 0.0))) {\n"
-"        samplePos.a = len + 1.0;\n"
-"        return samplePos;\n"
-"    }\n"
-"    if (frontface) {\n"
-"        dis = max(0.0, dis);\n"
-"        samplePos = vec4(samplePos.xyz+dir * dis, dis);\n"
-"        len = min(disBackFace, len);\n"
-"    }\n"
-"    if (!frontface) {\n"
-"        len = min(dis, len);\n"
-"        disBackFace = max(0.0, disBackFace);\n"
-"        samplePos = vec4(samplePos.xyz+dir * disBackFace, disBackFace);\n"
-"    }\n"
-"    return samplePos;\n"
-"}\n"
-"void main() {\n"
-"    vec3 start = vColor;//gl_TexCoord[1].xyz;\n"
-"    vec3 backPosition = GetBackPosition(start);\n"
-"    vec3 dir = backPosition - start;\n"
-"    float len = length(dir);\n"
-"    dir = normalize(dir);\n"
-"    vec4 deltaDir = vec4(dir.xyz * stepSize, stepSize);\n"
-"    vec4 gradSample, colorSample;\n"
-"    float bgNearest = len; //assume no hit\n"
-"    vec4 colAcc = vec4(0.0,0.0,0.0,0.0);\n"
-"    vec4 prevGrad = vec4(0.0,0.0,0.0,0.0);\n"
-"    //background pass\n"
-"    float noClipLen = len;\n"
-"    vec4 samplePos = vec4(start.xyz, 0.0);\n"
-"    vec4 clipPos = applyClip(dir, samplePos, len);\n"
-"    float stepSizeX2 = samplePos.a + (stepSize * 2.0);\n"
-"    float opacityCorrection = stepSize/sliceSize;\n"
-"    //fast pass - optional\n"
-"    fastPass (len, dir, intensityVol, samplePos);\n"
-"    if ((textureSz.x < 1) || ((samplePos.a > len) && ( overlays < 1 ))) { //no hit\n"
-"        gl_FragColor = colAcc;\n"
-"        return;\n"
-"    }\n"
-"    if (samplePos.a < clipPos.a) {\n"
-"        samplePos = clipPos;\n"
-"        bgNearest = clipPos.a;\n"
-"        float stepSizeX2 = samplePos.a + (stepSize * 2.0);\n"
-"        while (samplePos.a <= stepSizeX2) {\n"
-"            colorSample = texture3D(intensityVol,samplePos.xyz);\n"
-"            colorSample.a = 1.0-pow((1.0 - colorSample.a), opacityCorrection);\n"
-"            colorSample.a = clamp(colorSample.a*3.0,0.0, 1.0);\n"
-"            colorSample.rgb *= colorSample.a;\n"
-"            colAcc= (1.0 - colAcc.a) * colorSample + colAcc;\n"
-"            samplePos += deltaDir;\n"
-"        }\n"
-"        //gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0); return;\n"
-"    }\n"
-"    //end fastpass - optional\n"
-"    float ran = fract(sin(gl_FragCoord.x * 12.9898 + gl_FragCoord.y * 78.233) * 43758.5453);\n"
-"    samplePos += deltaDir * ran; //jitter ray\n"
-"    deltaDir = vec4(dir.xyz * stepSize, stepSize);\n"
-"    vec3 defaultDiffuse = vec3(0.5, 0.5, 0.5);\n"
-"    vec3 lightPositionN = normalize(lightPosition);\n"
-"    //colAcc = vec4(0,0.2,0.0,0.0);//background\n"
-"    while (samplePos.a <= len) {\n"
-"        colorSample = texture3D(intensityVol,samplePos.xyz);\n"
-"        if (colorSample.a > 0.0) {\n"
-"            colorSample.a = 1.0-pow((1.0 - colorSample.a), opacityCorrection);\n"
-"            bgNearest = min(samplePos.a,bgNearest);\n"
-"            gradSample = texture3D(gradientVol,samplePos.xyz);\n"
-"            gradSample.rgb = normalize(gradSample.rgb*2.0 - 1.0);\n"
-"            if (gradSample.a < prevGrad.a)\n"
-"                gradSample.rgb = prevGrad.rgb;\n"
-"            prevGrad = gradSample;\n"
-"            vec3 a = colorSample.rgb * ambient;\n"
-"            vec3 d = max(dot(gradSample.rgb, lightPositionN), 0.0) * colorSample.rgb * diffuse;\n"
-"            float s =   specular * pow(max(dot(reflect(lightPositionN, gradSample.rgb), dir), 0.0), shininess);\n"
-"            colorSample.rgb = (a + d + s) * colorSample.a;\n"
-"            colAcc= (1.0 - colAcc.a) * colorSample + colAcc;\n"
-"            if ( colAcc.a > 0.95 )\n"
-"                break;\n"
-"        }\n"
-"        samplePos += deltaDir;\n"
-"    } //while samplePos.a < len\n"
-"    colAcc.a = colAcc.a/0.95;\n"
-"    //colAcc.a *= backAlpha;\n"
-"    if ( overlays < 1 ) {\n"
-"        gl_FragColor = colAcc;\n"
-"        return;\n"
-"    }\n"
-"    //overlay pass\n"
-"    if (overlayClip > 0)\n"
-"        samplePos = clipPos;\n"
-"    else {\n"
-"        len = noClipLen;\n"
-"        samplePos = vec4(start.xyz +deltaDir.xyz* (fract(sin(gl_FragCoord.x * 12.9898 + gl_FragCoord.y * 78.233) * 43758.5453)), 0.0);\n"
-"    }\n"
-"    //fast pass - optional\n"
-"    clipPos = samplePos;\n"
-"    fastPass (len, dir, intensityOverlay, samplePos);\n"
-"    if (samplePos.a > len) { //no hit\n"
-"        gl_FragColor = colAcc;\n"
-"        return;\n"
-"    }\n"
-"    if (samplePos.a < clipPos.a)\n"
-"        samplePos = clipPos;\n"
-"    //end fastpass - optional\n"
-"    vec4 overAcc = vec4(0.0,0.0,0.0,0.0);\n"
-"    prevGrad = vec4(0.0,0.0,0.0,0.0);\n"
-"    float overFarthest = len;\n"
-"    while (samplePos.a <= len) {\n"
-"        colorSample = texture3D(intensityOverlay,samplePos.xyz);\n"
-"        if (colorSample.a > 0.00) {\n"
-"            if (overAcc.a < 0.3)\n"
-"                overFarthest = samplePos.a;\n"
-"            colorSample.a = 1.0-pow((1.0 - colorSample.a), stepSize/sliceSize);\n"
-"            colorSample.a *=  overlayFuzzy;\n"
-"            vec3 a = colorSample.rgb * ambient;\n"
-"            float s =  0;\n"
-"            vec3 d = vec3(0.0, 0.0, 0.0);\n"
-"            gradSample = texture3D(gradientOverlay,samplePos.xyz); //interpolate gradient direction and magnitude\n"
-"            gradSample.rgb = normalize(gradSample.rgb*2.0 - 1.0);\n"
-"            if (gradSample.a < prevGrad.a)\n"
-"                gradSample.rgb = prevGrad.rgb;\n"
-"            prevGrad = gradSample;\n"
-"            float lightNormDot = dot(gradSample.rgb, lightPosition);\n"
-"            d = max(lightNormDot, 0.0) * colorSample.rgb * diffuse;\n"
-"            s =   specular * pow(max(dot(reflect(lightPosition, gradSample.rgb), dir), 0.0), shininess);\n"
-"            colorSample.rgb = a + d + s;\n"
-"            colorSample.rgb *= colorSample.a;\n"
-"            overAcc= (1.0 - overAcc.a) * colorSample + overAcc;\n"
-"            if (overAcc.a > 0.95 )\n"
-"                break;\n"
-"        }\n"
-"        samplePos += deltaDir;\n"
-"    } //while samplePos.a < len\n"
-"    overAcc.a = overAcc.a/0.95;\n"
-"    float overMix = overAcc.a;\n"
-"    if (((overFarthest) > bgNearest) && (colAcc.a > 0.0)) { //background (partially) occludes overlay\n"
-"        float dx = (overFarthest - bgNearest)/1.73;\n"
-"        dx = colAcc.a * pow(dx, overlayDepth);\n"
-"        overMix *= 1.0 - dx;\n"
-"    }\n"
-"    colAcc.rgb = mix(colAcc.rgb, overAcc.rgb, overMix);\n"
-"    colAcc.a = max(colAcc.a, overAcc.a);\n"
-"    gl_FragColor = colAcc;\n"
-"}";
-
-const char *frag_default =
-"#version 120\n"
-"varying vec3 vColor;\n"
-"uniform vec3 rayDir;\n"
-"uniform int overlays;\n"
-"uniform float stepSize, sliceSize;\n"
-"//uniform vec3 lightPosition;\n"
-"uniform vec4 clipPlane;\n"
-"uniform sampler3D intensityVol, intensityOverlay;\n"
-"uniform float clipThick = 2.0;\n"
-"uniform vec3 textureSz = vec3(3.0, 2.0, 1.0);\n"
-"//uniform float backAlpha = 0.95;\n"
-"uniform float overlayClip = 0.0;\n"
-"uniform float overlayFuzzy = 0.5;\n"
-"uniform float overlayDepth = 0.3;\n"
-"vec3 GetBackPosition (vec3 startPosition) {\n"
-" vec3 invR = 1.0 / rayDir;\n"
-" vec3 tbot = invR * (vec3(0.0)-startPosition);\n"
-" vec3 ttop = invR * (vec3(1.0)-startPosition);\n"
-" vec3 tmax = max(ttop, tbot);\n"
-" vec2 t = min(tmax.xx, tmax.yz);\n"
-" return startPosition + (rayDir * min(t.x, t.y));\n"
-"}\n"
-"void fastPass (float len, vec3 dir, sampler3D vol, inout vec4 samplePos){\n"
-"    vec4 deltaDir = vec4(dir.xyz * max(stepSize, sliceSize * 1.95), max(stepSize, sliceSize * 1.95));\n"
-"    while  (texture3D(intensityVol,samplePos.xyz).a < 0.01) {\n"
-"        samplePos += deltaDir;\n"
-"        if (samplePos.a > len) return;\n"
-"    }\n"
-"    samplePos -= deltaDir;\n"
-"}\n"
-"vec4 applyClip(vec3 dir, inout vec4 samplePos, inout float len) {\n"
-"    float cdot = dot(dir,clipPlane.xyz);\n"
-"    if  ((clipPlane.a > 1.0) || (cdot == 0.0)) return samplePos;\n"
-"    bool frontface = (cdot > 0.0);\n"
-"    float dis = (-clipPlane.a - dot(clipPlane.xyz, samplePos.xyz-0.5)) / cdot;\n"
-"    float  disBackFace = (-(clipPlane.a-clipThick) - dot(clipPlane.xyz, samplePos.xyz-0.5)) / cdot;\n"
-"    if (((frontface) && (dis >= len)) || ((!frontface) && (dis <= 0.0))) {\n"
-"        samplePos.a = len + 1.0;\n"
-"        return samplePos;\n"
-"    }\n"
-"    if (frontface) {\n"
-"        dis = max(0.0, dis);\n"
-"        samplePos = vec4(samplePos.xyz+dir * dis, dis);\n"
-"        len = min(disBackFace, len);\n"
-"    }\n"
-"    if (!frontface) {\n"
-"        len = min(dis, len);\n"
-"        disBackFace = max(0.0, disBackFace);\n"
-"        samplePos = vec4(samplePos.xyz+dir * disBackFace, disBackFace);\n"
-"    }\n"
-"    return samplePos;\n"
-"}\n"
-"void main() {\n"
-"    vec3 start = vColor;//gl_TexCoord[1].xyz;\n"
-"    vec3 backPosition = GetBackPosition(start);\n"
-"    vec3 dir = backPosition - start;\n"
-"    float len = length(dir);\n"
-"    dir = normalize(dir);\n"
-"    vec4 deltaDir = vec4(dir.xyz * stepSize, stepSize);\n"
-"    vec4 gradSample, colorSample;\n"
-"    float bgNearest = len; //assume no hit\n"
-"    vec4 colAcc = vec4(0.0,0.0,0.0,0.0);\n"
-"    vec4 prevGrad = vec4(0.0,0.0,0.0,0.0);\n"
-"    //background pass\n"
-"    float noClipLen = len;\n"
-"    vec4 samplePos = vec4(start.xyz, 0.0);\n"
-"    vec4 clipPos = applyClip(dir, samplePos, len);\n"
-"    float stepSizeX2 = samplePos.a + (stepSize * 2.0);\n"
-"    float opacityCorrection = stepSize/sliceSize;\n"
-"    //fast pass - optional\n"
-"    fastPass (len, dir, intensityVol, samplePos);\n"
-"    if ((textureSz.x < 1) || ((samplePos.a > len) && ( overlays < 1 ))) { //no hit\n"
-"        gl_FragColor = colAcc;\n"
-"        return;\n"
-"    }\n"
-"    if (samplePos.a < clipPos.a) {\n"
-"        samplePos = clipPos;\n"
-"        bgNearest = clipPos.a;\n"
-"        float stepSizeX2 = samplePos.a + (stepSize * 2.0);\n"
-"        while (samplePos.a <= stepSizeX2) {\n"
-"            colorSample = texture3D(intensityVol,samplePos.xyz);\n"
-"            colorSample.a = 1.0-pow((1.0 - colorSample.a), opacityCorrection);\n"
-"            colorSample.a = clamp(colorSample.a*3.0,0.0, 1.0);\n"
-"            colorSample.rgb *= colorSample.a;\n"
-"            colAcc= (1.0 - colAcc.a) * colorSample + colAcc;\n"
-"            samplePos += deltaDir;\n"
-"        }\n"
-"    }\n"
-"    //end fastpass - optional\n"
-"    float ran = fract(sin(gl_FragCoord.x * 12.9898 + gl_FragCoord.y * 78.233) * 43758.5453);\n"
-"    samplePos += deltaDir * ran; //jitter ray\n"
-"    deltaDir = vec4(dir.xyz * stepSize, stepSize);\n"
-"    vec3 defaultDiffuse = vec3(0.5, 0.5, 0.5);\n"
-"    //vec3 lightPositionN = normalize(lightPosition);\n"
-"    //colAcc = vec4(0,0.2,0.0,0.0);//background\n"
-"    while (samplePos.a <= len) {\n"
-"        colorSample = texture3D(intensityVol,samplePos.xyz);\n"
-"        if (colorSample.a > 0.0) {\n"
-"            colorSample.a = 1.0-pow((1.0 - colorSample.a), opacityCorrection);\n"
-"            bgNearest = min(samplePos.a,bgNearest);\n"
-"            colorSample.rgb *= colorSample.a;\n"
-"            colAcc= (1.0 - colAcc.a) * colorSample + colAcc;\n"
-"            if ( colAcc.a > 0.95 )\n"
-"                break;\n"
-"        }\n"
-"        samplePos += deltaDir;\n"
-"    } //while samplePos.a < len\n"
-"    colAcc.a = colAcc.a/0.95;\n"
-"    //colAcc.a *= backAlpha;\n"
-"    if ( overlays < 1 ) {\n"
-"        gl_FragColor = colAcc;\n"
-"        return;\n"
-"    }\n"
-"    gl_FragColor = colAcc;\n"
-"    //overlay pass\n"
-"    vec4 overAcc = vec4(0.0,0.0,0.0,0.0);\n"
-"    prevGrad = vec4(0.0,0.0,0.0,0.0);\n"
-"    if (overlayClip > 0)\n"
-"        samplePos = clipPos;\n"
-"    else {\n"
-"        len = noClipLen;\n"
-"        samplePos = vec4(start.xyz +deltaDir.xyz* (fract(sin(gl_FragCoord.x * 12.9898 + gl_FragCoord.y * 78.233) * 43758.5453)), 0.0);\n"
-"    }\n"
-"    //fast pass - optional\n"
-"    clipPos = samplePos;\n"
-"    fastPass (len, dir, intensityOverlay, samplePos);\n"
-"    if (samplePos.a > len) { //no hit\n"
-"        gl_FragColor = colAcc;\n"
-"        return;\n"
-"    }\n"
-"    if (samplePos.a < clipPos.a)\n"
-"        samplePos = clipPos;\n"
-"    //end fastpass - optional\n"
-"    float overFarthest = len;\n"
-"    while (samplePos.a <= len) {\n"
-"        colorSample = texture3D(intensityOverlay,samplePos.xyz);\n"
-"        if (colorSample.a > 0.00) {\n"
-"            if (overAcc.a < 0.3)\n"
-"              overFarthest = samplePos.a;\n"
-"            colorSample.a = 1.0-pow((1.0 - colorSample.a), stepSize/sliceSize);\n"
-"            colorSample.a *=  overlayFuzzy;\n"
-"            colorSample.rgb *= colorSample.a;\n"
-"            overAcc= (1.0 - overAcc.a) * colorSample + overAcc;\n"
-"            if (overAcc.a > 0.95 )\n"
-"                break;\n"
-"        }\n"
-"        samplePos += deltaDir;\n"
-"    } //while samplePos.a < len\n"
-"    overAcc.a = overAcc.a/0.95;\n"
-"    float overMix = overAcc.a;\n"
-"    if (((overFarthest) > bgNearest) && (colAcc.a > 0.0)) { //background (partially) occludes overlay\n"
-"        float dx = (overFarthest - bgNearest)/1.73;\n"
-"        dx = colAcc.a * pow(dx, overlayDepth);\n"
-"        overMix *= 1.0 - dx;\n"
-"    }\n"
-"    colAcc.rgb = mix(colAcc.rgb, overAcc.rgb, overMix);\n"
-"    colAcc.a = max(colAcc.a, overAcc.a);\n"
-"    gl_FragColor = colAcc;\n"
-"}";
-
+char *frag_default = NULL;     // load default_shader.frag
+char *frag_advanced_CT = NULL; // load advanced_CT_shader.frag
+char *frag_advanced_MR = NULL; // load advanced_MR_shader.frag
 
 void initShaderWithFile (NII_PREFS* prefs) {
+    
+    NSString * bundlePath = [[NSBundle mainBundle] resourcePath];
+    if (frag_default == NULL) {
+        NSString *shaderPath = [bundlePath stringByAppendingPathComponent:@"default_shader.frag"];
+        frag_default = read_file(shaderPath.UTF8String);
+    }
+    if (frag_advanced_CT == NULL) {
+        NSString *shaderPath = [bundlePath stringByAppendingPathComponent:@"advanced_CT_shader.frag"];
+        frag_advanced_CT = read_file(shaderPath.UTF8String);
+    }
+    if (frag_advanced_MR == NULL) {
+        NSString *shaderPath = [bundlePath stringByAppendingPathComponent:@"advanced_MR_shader.frag"];
+        frag_advanced_MR = read_file(shaderPath.UTF8String);
+    }
+    
     if (prefs->glslprogramMR != 0) glDeleteShader(prefs->glslprogramMR);
     #ifdef  MY_USE_ADVANCED_GLSL
     if (prefs->glslprogramCT != 0) glDeleteShader(prefs->glslprogramCT);
@@ -1163,7 +647,7 @@ void sph2cartDeg90(float azimuth, float elevation, float* lX, float* lY, float *
     float E,Phi,Theta;
     E = azimuth;
     while (E < 0)
-        E = E + 360;   
+        E = E + 360;
     while (E > 360)
         E = E - 360;
     Theta = degToRad(E);
@@ -1192,7 +676,7 @@ void sph2cartDeg90x(float Azimuth, float Elevation, float R, float* lX, float* l
         E = E - (n * 360);
     }
     if (((E > 89) && (E < 91)) || ((E < -269) && (E > -271)))
-        E = 90;        
+        E = 90;
     if (((E > 269) && (E < 271)) || ((E < -89) && (E > -91)) )
         E = -90;
     Phi = degToRad(E);
@@ -1332,7 +816,7 @@ void rayCasting (NII_PREFS* prefs) {
     } else
     #endif
     //TO DO: ray Dir,
-    uniform1i( "backFace", 0, prefs );		// backFaceBuffer -> texture0
+    uniform1i( "backFace", 0, prefs );        // backFaceBuffer -> texture0
     //uniform3fv("clearColor",prefs->backColor[0],prefs->backColor[1],prefs->backColor[2], prefs);
     clipUniforms(prefs);
     uniform3fv("textureSz",prefs->voxelDim[1],prefs->voxelDim[2],prefs->voxelDim[3], prefs);
