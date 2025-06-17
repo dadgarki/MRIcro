@@ -79,7 +79,7 @@ extern "C" {
         NII_OVERLAY overlays[MAX_OVERLAY];
         #ifdef NII_IMG_RENDER //from nii_definetypes.h
         //GLuint frameBuffer, finalImage, renderBuffer, backFaceBuffer;
-        GLuint dlBox3D, glslprogramCur, glslprogramMR, glslprogramCT,  intensityOverlay3D, gradientOverlay3D,intensityTexture3D, gradientTexture3D; //, transferTexture1;
+        GLuint dlBox3D, glslprogramCur, glslprogramMR, glslprogramCT,  intensityOverlay3D, gradientOverlay3D,intensityTexture3D, gradientTexture3D, matcap2D; //, transferTexture1;
         float TexScale[4], lut_bias;
         //GLhandleARB glslprogram;
         //GLhandleARB glslprogramBlur;

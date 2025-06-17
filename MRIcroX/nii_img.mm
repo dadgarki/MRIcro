@@ -1978,6 +1978,40 @@ GLuint recalcSubRGBA(NII_PREFS* prefs, uint32_t *data, GLuint oldHandle)
     return handle;
 }
 
+GLuint loadMatCap(NII_PREFS* prefs, GLuint oldHandle) {
+    
+    NSString * imagePath = [[NSBundle mainBundle] pathForResource:@"00ShinyWhite" ofType:@"jpg"];
+    NSImage * image = [[NSImage alloc] initWithContentsOfFile:imagePath];
+    NSBitmapImageRep *bitmapRep = [image bestRepresentationForRect:NSMakeRect(0, 0, image.size.width, image.size.height) context:nil hints:nil];
+    const unsigned char *imageData = [bitmapRep bitmapData]; // The raw image data
+    
+    GLuint handle;
+    if (prefs->matcap2D != 0) {
+        glDeleteTextures(1, &oldHandle);
+    }
+    glGenTextures(1, &handle);
+    glBindTexture(GL_TEXTURE_2D, handle);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+    
+    NSInteger width = [bitmapRep pixelsWide];
+    NSInteger height = [bitmapRep pixelsHigh];
+    // Upload the image data to the OpenGL texture
+    glTexImage2D(GL_TEXTURE_2D,
+                 0,                  // Level of detail
+                 GL_RGBA,            // Internal format
+                 (GLsizei)width,     // Width of the texture
+                 (GLsizei)height,    // Height of the texture
+                 0,                  // Border (must be 0)
+                 GL_RGBA,            // Format of the pixel data
+                 GL_UNSIGNED_BYTE,   // Data type of the pixel data
+                 imageData);         // Raw pixel data
+    
+    return handle;
+}
+
 int recalcGL(FSLIO* fslio, NII_PREFS* prefs)
 {
 //    if ((fslio->niftiptr->dim[0] < 3) || (fslio->niftiptr->dim[0] >4)) {
@@ -2048,6 +2082,9 @@ int recalcGL(FSLIO* fslio, NII_PREFS* prefs)
         recalcSubGL(prefs,img8bit, prefs->lut);
         free(img8bit);
     }
+    
+    prefs->matcap2D = loadMatCap(prefs, prefs->matcap2D);
+    
 #ifdef MY_DEBUG
     NSLog(@"recalcGL_Sec = %f", [[NSDate date] timeIntervalSinceDate:methodStart]);
 #endif
@@ -4007,6 +4044,7 @@ void closeOverlays (NII_PREFS* prefs)
         prefs->gradientTexture3D = 0;
         prefs->intensityOverlay3D = 0;
         prefs->gradientOverlay3D = 0;
+        prefs->matcap2D = 0;
         prefs->numDtiV = 0;
         prefs->orthoOrient = true;
         prefs->advancedRender = false;

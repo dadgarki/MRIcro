@@ -81,6 +81,8 @@
 		7C917E152E0147CA00C77E31 /* default_shader.frag in Resources */ = {isa = PBXBuildFile; fileRef = 7C917E132E0147C500C77E31 /* default_shader.frag */; };
 		7C917E172E0147D200C77E31 /* sobel_shader.frag in Resources */ = {isa = PBXBuildFile; fileRef = 7C917E162E0147CE00C77E31 /* sobel_shader.frag */; };
 		7C917E182E0147D200C77E31 /* sobel_shader.frag in Resources */ = {isa = PBXBuildFile; fileRef = 7C917E162E0147CE00C77E31 /* sobel_shader.frag */; };
+		7C917E1A2E014BD700C77E31 /* 00ShinyWhite.jpg in Resources */ = {isa = PBXBuildFile; fileRef = 7C917E192E014BD700C77E31 /* 00ShinyWhite.jpg */; };
+		7C917E1B2E014BD700C77E31 /* 00ShinyWhite.jpg in Resources */ = {isa = PBXBuildFile; fileRef = 7C917E192E014BD700C77E31 /* 00ShinyWhite.jpg */; };
 		83E45AB122F6EE030065DA40 /* libz.1.2.11.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 83E45AB022F6EE030065DA40 /* libz.1.2.11.tbd */; };
 /* End PBXBuildFile section */
 
@@ -167,6 +169,7 @@
 		7C917E102E0147B300C77E31 /* advanced_MR_shader.frag */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.glsl; path = advanced_MR_shader.frag; sourceTree = "<group>"; };
 		7C917E132E0147C500C77E31 /* default_shader.frag */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.glsl; path = default_shader.frag; sourceTree = "<group>"; };
 		7C917E162E0147CE00C77E31 /* sobel_shader.frag */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.glsl; path = sobel_shader.frag; sourceTree = "<group>"; };
+		7C917E192E014BD700C77E31 /* 00ShinyWhite.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = 00ShinyWhite.jpg; sourceTree = "<group>"; };
 		83510658237C228100444E7E /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = Base; path = Base.lproj/MainMenu.xib; sourceTree = "<group>"; };
 		83E45AB022F6EE030065DA40 /* libz.1.2.11.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libz.1.2.11.tbd; path = usr/lib/libz.1.2.11.tbd; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
@@ -200,6 +203,7 @@
 		4F9A58871609E769008ECBE2 = {
 			isa = PBXGroup;
 			children = (
+				7C917E192E014BD700C77E31 /* 00ShinyWhite.jpg */,
 				1D8342CC25B7007C00DAAA3B /* atlas */,
 				1D2281D725B5DCC900A0F24A /* standard */,
 				1D2281C925B5DBA500A0F24A /* aal.nii.gz */,
@@ -425,6 +429,7 @@
 				7C917E152E0147CA00C77E31 /* default_shader.frag in Resources */,
 				7C917E112E0147B900C77E31 /* advanced_MR_shader.frag in Resources */,
 				4F12CE791A195DB000408A12 /* MainMenu.xib in Resources */,
+				7C917E1A2E014BD700C77E31 /* 00ShinyWhite.jpg in Resources */,
 				7C917E182E0147D200C77E31 /* sobel_shader.frag in Resources */,
 				4F12CE7A1A195DB000408A12 /* MainWindow.xib in Resources */,
 				4F12CE7B1A195DB000408A12 /* mricro.icns in Resources */,
@@ -443,6 +448,7 @@
 				7C917E142E0147CA00C77E31 /* default_shader.frag in Resources */,
 				7C917E122E0147B900C77E31 /* advanced_MR_shader.frag in Resources */,
 				4F9A58AD1609E769008ECBE2 /* MainMenu.xib in Resources */,
+				7C917E1B2E014BD700C77E31 /* 00ShinyWhite.jpg in Resources */,
 				7C917E172E0147D200C77E31 /* sobel_shader.frag in Resources */,
 				4F9A58B41609E786008ECBE2 /* MainWindow.xib in Resources */,
 				4FCDFAEC18BCFD4700FB2F28 /* mricro.icns in Resources */,

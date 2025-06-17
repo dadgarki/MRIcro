@@ -465,6 +465,11 @@ void uniform4fv(const char* name, float v1, float v2, float v3, float v4, NII_PR
     glUniform4f(glGetUniformLocation(prefs->glslprogramCur, name), v1, v2, v3, v4);
 }
 
+void uniformMatrix3fv(const char*name, float* values, NII_PREFS* prefs)
+{
+    glUniformMatrix3fv(glGetUniformLocation(prefs->glslprogramCur, name), 1, GL_FALSE, values);
+}
+
 /*const char *vert_defaultOLD =
 "void main() {\n"
 " gl_TexCoord[1] = gl_MultiTexCoord1;\n"
@@ -1313,6 +1318,10 @@ void drawBox(NII_PREFS* prefs) {
             glBindTexture(GL_TEXTURE_3D, prefs->gradientTexture3D);
         }
     }
+    
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, prefs->matcap2D);
+    
     #endif
     clipUniforms(prefs);
     uniform3fv("rayDir",rayDir.v[0], rayDir.v[1], rayDir.v[2], prefs);//<<<
@@ -1320,6 +1329,20 @@ void drawBox(NII_PREFS* prefs) {
     lightUniforms(prefs);
     uniform1f( "sliceSize", 1.0/(float)prefs->renderSlices, prefs );
     uniform1f( "stepSize", computeStepSize(3, prefs), prefs );
+    
+    mat44 normalMatrix = nifti_mat44_inverse(m);
+    float nMtx[9];
+    nMtx[0] = normalMatrix.m[0][0];
+    nMtx[1] = normalMatrix.m[0][1];
+    nMtx[2] = normalMatrix.m[0][2];
+    nMtx[3] = normalMatrix.m[1][0];
+    nMtx[4] = normalMatrix.m[1][1];
+    nMtx[5] = normalMatrix.m[1][2];
+    nMtx[6] = normalMatrix.m[2][0];
+    nMtx[7] = normalMatrix.m[2][1];
+    nMtx[8] = normalMatrix.m[2][2];
+    uniformMatrix3fv("NormalMatrix", nMtx, prefs);
+    
     glCallList(prefs->dlBox3D);
     glUseProgram(0);
     glDisable(GL_CULL_FACE);
@@ -1372,6 +1395,7 @@ void initTRayCast (NII_PREFS* prefs)
     prefs->intensityTexture3D = 0;
     prefs->gradientOverlay3D = 0;
     prefs->intensityOverlay3D = 0;
+    prefs->matcap2D = 0;
     prefs->glslprogramIntBlur = 0;
     prefs->glslprogramIntSobel = 0;
     prefs->glslUpdateGradientsOverlay = false;
