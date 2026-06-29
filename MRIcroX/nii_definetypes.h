@@ -10,6 +10,7 @@
 #define MRIpro_nii_definetypes_h
 #include "nii_io.h"  // defines struct nifti_1_header
 #import "nifti1_io_core.h"
+#include "nii_platform.h" // kRenderHandle: GPU object name without an OpenGL/iOS-incompatible header dependency
 
 #define NII_IMG_RENDER //determines whether 3D rendering code is compiled
 
@@ -78,15 +79,9 @@ extern "C" {
         int colorBarBorderPx;
         NII_OVERLAY overlays[MAX_OVERLAY];
         #ifdef NII_IMG_RENDER //from nii_definetypes.h
-        //GLuint frameBuffer, finalImage, renderBuffer, backFaceBuffer;
-        GLuint dlBox3D, glslprogramCur, glslprogramMR, glslprogramCT,  intensityOverlay3D, gradientOverlay3D,intensityTexture3D, gradientTexture3D, matcap2D; //, transferTexture1;
+        // (legacy OpenGL object-name fields removed in the Metal migration; the
+        //  renderer owns its own MTLTexture/pipeline objects in NIIMetalRenderer)
         float TexScale[4], lut_bias;
-        //GLhandleARB glslprogram;
-        //GLhandleARB glslprogramBlur;
-        GLuint glslprogramIntBlur;
-        //GLhandleARB glslprogramSobel;
-        GLuint glslprogramIntSobel;
-        bool glslUpdateGradientsBG, glslUpdateGradientsOverlay;
         float renderDistance;
         int renderAzimuth, renderElevation, renderSlices, clipAzimuth,clipElevation,clipDepth, rayCastQuality1to4, renderWid, renderHt, renderLeft, renderBottom, displayModeGL;
         bool showCube, rayCastViewCenteredLight;

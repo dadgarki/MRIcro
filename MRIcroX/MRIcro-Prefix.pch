@@ -1,7 +1,14 @@
 //
-// Prefix header for all source files of the 'MRIcroX' target in the 'MRIcroX' project
+// Prefix header for the MRIcro / MRIcroPro (macOS) and MRIcroPad (iOS/iPadOS)
+// targets. Pulls in the platform UI umbrella so the shared headers (nii_io.h
+// etc.) see NSString/NSData/CGFloat/NSInteger and the C standard library.
 //
 
 #ifdef __OBJC__
-    #import <Cocoa/Cocoa.h>
+    #import <TargetConditionals.h>
+    #if TARGET_OS_OSX
+        #import <Cocoa/Cocoa.h>
+    #else
+        #import <UIKit/UIKit.h>
+    #endif
 #endif

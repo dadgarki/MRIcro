@@ -7,9 +7,6 @@
 #import "nii_WindowController.h"
 #include "nii_foreignx.h"
 #include "nii_io.h" //for MY_DEBUG define
-#import <OpenGL/gl.h>
-#import <OpenGL/glext.h>
-#import <OpenGL/glu.h>
 
 
 @implementation MRIcroXAppDelegate
@@ -560,82 +557,7 @@
 
 - (void) glDidFinishLaunching
 {
-    static NSOpenGLPixelFormatAttribute pixelFormatAttributes[] = {0};
-    
-    /*
-     if ([[NSUserDefaults standardUserDefaults] boolForKey:@"darkMode"])
-     theWindow.appearance = [NSAppearance appearanceNamed:NSAppearanceNameVibrantDark];
-     else
-     theWindow.appearance = [NSAppearance appearanceNamed:NSAppearanceNameVibrantLight];
-     self.prefWindow.appearance = [NSAppearance appearanceNamed:NSAppearanceNameVibrantDark];
-    self.dcm2niiWindow.appearance = [NSAppearance appearanceNamed:NSAppearanceNameVibrantDark];
-    //self.window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameVibrantDark];*/
-    
-    /*NSOpenGLPixelFormatAttribute pixelFormatAttributes[] =
-    {
-        NSOpenGLPFAOpenGLProfile, NSOpenGLProfileVersionLegacy,
-        NSOpenGLPFAColorSize    , 24                           ,
-        NSOpenGLPFAAlphaSize    , 8                            ,
-        NSOpenGLPFADoubleBuffer ,
-        NSOpenGLPFAAccelerated  ,
-        NSOpenGLPFANoRecovery   ,
-        0
-    };*/
-    /*NSOpenGLPixelFormat *pixelFormat = [[[NSOpenGLPixelFormat alloc] initWithAttributes:pixelFormatAttributes] autorelease];
-    [self setView:[[[NSOpenGLView alloc] initWithFrame:[[[self window] contentView] bounds] pixelFormat:pixelFormat] autorelease]];
-    [[[self window] contentView] addSubview:[self view]];*/
-    
-    //[self vectTest];
-    NSOpenGLPixelFormat *pixelFormat = [[NSOpenGLPixelFormat alloc] initWithAttributes:pixelFormatAttributes];
-    
-    //NSOpenGLPixelFormat *pixelFormat = [[NSOpenGLPixelFormat alloc] initWithAttributes:glAttributes];
-    NSOpenGLContext *openGLContext = [[NSOpenGLContext alloc] initWithFormat:pixelFormat shareContext:nil];
-    [openGLContext makeCurrentContext];
-    GLint virtualScreen = [openGLContext currentVirtualScreen];
-    // Since this may be called from outside the display loop, make sure
-    // the context is current so the GL calls all work properly.
-    [openGLContext makeCurrentContext];
-    // Use the current virtual screen index to interrogate the pixel format
-    // for its display mask and renderer id.
-    // Note, "pixelFormat" is the NSOpenGLPixelFormat that your OpenGL context
-    // is created from, typically created in your OpenGL view's -initWithFrame:
-    GLint displayMask;
-    GLint rendererID;
-    [pixelFormat getValues:&displayMask forAttribute:NSOpenGLPFAScreenMask forVirtualScreen:virtualScreen];
-    [pixelFormat getValues:&rendererID  forAttribute:NSOpenGLPFARendererID forVirtualScreen:virtualScreen];
-    // Get renderer info for all renderers that match the display mask.
-    GLint i, nrend = 0;
-    CGLRendererInfoObj rend;
-    CGLQueryRendererInfo((GLuint)displayMask, &rend, &nrend);
-    GLint videoMemory = 0;
-    for (i = 0; i < nrend; i++) {
-        GLint thisRendererID;
-        
-        CGLDescribeRenderer(rend, i, kCGLRPRendererID, &thisRendererID);
-        // See if this is the one we want
-        if (thisRendererID == rendererID) {
-            CGLDescribeRenderer(rend, i, kCGLRPVideoMemoryMegabytes, &videoMemory);
-            #ifdef MY_DEBUG //defined in nii_io.h
-            NSLog(@"%@", [NSString stringWithCString:(const char *)glGetString(GL_RENDERER)  encoding:NSASCIIStringEncoding]);
-            NSLog(@"Renderer ID = 0x%x", thisRendererID);
-            NSLog(@"Video Memory = %d MB", videoMemory);
-            #endif
-        }
-    }
-    CGLDestroyRendererInfo(rend);
-    const int kMinVRAM = 250;
-    if (videoMemory < kMinVRAM) {
-        NSString *str = [NSString stringWithFormat:@"This software requires %dmb of video memory. If you are using a virtual machine try adjusting the graphics settings", kMinVRAM];
-        NSAlert *alert = [NSAlert alertWithMessageText: @"Insufficient video memory"
-                                         defaultButton: @"OK"
-                                       alternateButton: @""
-                                           otherButton: @""
-                             informativeTextWithFormat: @"%@",str ];
-        [[NSRunningApplication currentApplication] activateWithOptions:NSApplicationActivateIgnoringOtherApps];
-        [alert runModal];
-        videoMemory = 0;
-        exit(0);
-    }
+    return; // OpenGL VRAM probe removed — Metal handles device selection
 }
 
 /*- (void)imgLoad

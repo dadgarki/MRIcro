@@ -1,6 +1,6 @@
 
 #include "nii_mosaic.h"
-#import <Cocoa/Cocoa.h>
+#import <Foundation/Foundation.h>
 #import <stdio.h>
 
 @implementation mosaicObj
@@ -95,7 +95,7 @@
     
     //first pass: determine if slices are fractions or mm
     //const int xyzSz[4] = {0, 91, 109, 91};
-    TotalSizeInPixels  = NSMakePoint(0, 0);
+    TotalSizeInPixels  = CGPointMake(0, 0);
     if ((HOverlap < -1) || (HOverlap  >1) || (VOverlap < -1) || (VOverlap  >1) ){
         NSLog(@"drawMosaic exiting: HOverlap and VOverlap must be in the range -1..1");
         return;
@@ -103,9 +103,9 @@
     float maxSlice = -INFINITY;
     float minSlice = INFINITY;
     float maxX = 0;
-    NSPoint sz = NSMakePoint(0, 0);
-    NSPoint startpos = NSMakePoint(0, 0);
-    NSPoint endpos = NSMakePoint(0, 0);
+    CGPoint sz = CGPointMake(0, 0);
+    CGPoint startpos = CGPointMake(0, 0);
+    CGPoint endpos = CGPointMake(0, 0);
     for (int r = (kMaxMosaicDim-1); r >= 0; r--) {
     //for (int r = 0; r <kMaxMosaicDim; r++) {
         float maxY = 0;
@@ -116,13 +116,13 @@
                 if (slicePos > maxSlice) maxSlice = slicePos;
                 if (slicePos < minSlice) minSlice = slicePos;
                 if (Orient[r][c] == 1) //axial, wid=[1], ht=[2]
-                    sz = NSMakePoint(dim1, dim2);
+                    sz = CGPointMake(dim1, dim2);
                 else if (Orient[r][c] == 2) //coronal, wid=[1], ht=[3]
-                    sz = NSMakePoint(dim1, dim3);
+                    sz = CGPointMake(dim1, dim3);
                 else  //sagittal, wid=[2], ht=[3]
-                    sz = NSMakePoint(dim2, dim3);
+                    sz = CGPointMake(dim2, dim3);
                 //NSLog(@"Slice at x=%f y=%f", startpos.x, startpos.y);
-                Pos[r][c] = NSMakePoint(startpos.x, startpos.y);
+                Pos[r][c] = CGPointMake(startpos.x, startpos.y);
                 endpos.x = startpos.x + sz.x;
                 startpos.x = startpos.x + round(sz.x * (1.0- fabs(HOverlap)));
                 if (sz.y > maxY) maxY = sz.y;
@@ -141,7 +141,7 @@
     }
     //NSLog(@"bmp = wid:%f  ht:%f overlap:%f", maxX, endpos.y, VOverlap);
     //NSLog(@"V= %f, H=%f",VOverlap,HOverlap);
-    TotalSizeInPixels  = NSMakePoint(maxX, endpos.y);
+    TotalSizeInPixels  = CGPointMake(maxX, endpos.y);
     SliceIsMM = ((maxSlice > 1.0) || (minSlice < 0.0));
 }
 

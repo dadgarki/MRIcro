@@ -15,6 +15,13 @@
 #import <bzlib.h>
 #endif
 #include <stdlib.h>  // for memory alloc/free
+#include <stdint.h>
+// uint16/uint32 (no _t) come from macOS MacTypes.h via Cocoa; define them for
+// iOS so the ECAT/PET fixed-width header structs below keep the same layout.
+#if !TARGET_OS_OSX
+typedef uint16_t uint16;
+typedef uint32_t uint32;
+#endif
 //Open paired files, e.g. .HEAD/.BRIK
 //https://stackoverflow.com/questions/59566959/is-there-an-alternative-to-nsfilecoordinator-for-opening-related-files-in-a-sand/59580610#59580610
 #ifdef __APPLE__
@@ -1717,6 +1724,12 @@ int nii_readmgh(NSString * fname, struct nifti_1_header *nhdr, long * gzBytes, b
 unsigned char * nii_readBitmap(NSString * fname, struct nifti_1_header *nhdr)
 //To Do - Handle >3D images with multiple slices, channels and frames for example " tiffutil -info mitosis.tif" on ImageJ example dataset
 {
+#if !TARGET_OS_OSX
+    // Foreign standard-image import (TIFF/JPEG/PNG → volume) uses AppKit
+    // NSBitmapImageRep; not yet ported to iOS (would use CGImageSource).
+    (void)fname; (void)nhdr;
+    return NULL;
+#else
     //NSArray * imageReps = [NSBitmapImageRep imageRepsWithContentsOfFile:@"/Users/rorden/desktop/t1-head.tif"];
     NSArray * imageReps = [NSBitmapImageRep imageRepsWithContentsOfFile:fname];
     if (imageReps.count < 1) {
@@ -1810,6 +1823,7 @@ unsigned char * nii_readBitmap(NSString * fname, struct nifti_1_header *nhdr)
         nhdr->intent_code = NIFTI_INTENT_ESTIMATE;
     //return nii_rgb2Planar(img, nhdr, 0);
     return img;
+#endif
 } // nii_readBitmap()
 
 size_t numVox(struct nifti_1_header *nhdr, size_t vols ) {
@@ -2473,27 +2487,25 @@ NSString* promptModality(NSMutableArray * list)  {
 }// promptModality()*/
 
 NSString* promptModality(NSMutableArray * list)  {
-    NSString *prompt = [@"Enter desired modality. Your options are: " stringByAppendingString:  listString(list) ];
     NSString *defaultValue =  (NSString *)[list objectAtIndex: 0];
+#if TARGET_OS_OSX
+    NSString *prompt = [@"Enter desired modality. Your options are: " stringByAppendingString:  listString(list) ];
     NSAlert *alert = [NSAlert alertWithMessageText: prompt
                                      defaultButton:@"OK"
                                    alternateButton:@"Cancel"
                                        otherButton:nil
                          informativeTextWithFormat:@""];
-    //NSArray * langChoices = [[NSArray alloc] initWithObjects:@"English", @"French", @"German", @"Spanish", nil];
     NSPopUpButton * tmpPopup = [[NSPopUpButton alloc] initWithFrame:NSMakeRect(0, 0, 200, 24)];
     [tmpPopup addItemsWithTitles:list];
     [alert setAccessoryView:tmpPopup];
-    //NSTextField *input = [[NSTextField alloc] initWithFrame:NSMakeRect(0, 0, 200, 24)];
-    //[input setStringValue:defaultValue];
-    //[alert setAccessoryView:input];
     NSInteger button = [alert runModal];
     if (button == NSAlertDefaultReturn) {
         //NSLog(@"--->%ld", (long)tmpPopup.indexOfSelectedItem);
         return (NSString *)[list objectAtIndex: tmpPopup.indexOfSelectedItem];
-        //[input validateEditing];
-        //return [input stringValue];
     }
+#endif
+    // iOS: no modal modality picker yet; default to the first modality. A UIKit
+    // chooser can replace this in the iPad file-import flow.
     return defaultValue;
 }// promptModality()
 
@@ -2526,12 +2538,15 @@ unsigned char * nii_readMat(NSString * fname, struct nifti_1_header *nhdr)
     NSMutableArray * tagnamelist = [[NSMutableArray alloc] init];
     int nx = 0; int ny = 0; int nz = 0; int dataType = 0;
     unsigned char * img = NULL;
+#if TARGET_OS_OSX
     NSUInteger flags = [[[ NSApplication sharedApplication ] currentEvent ] modifierFlags ];
-
-    //NSUInteger flags = [[NSApp currentEvent] modifierFlags];
-    //bool specialKeys = ((flags & NSCommandKeyMask) == NSCommandKeyMask) || ((flags & NSControlKeyMask) == NSControlKeyMask) ;
     bool specialKeys = (flags & NSCommandKeyMask) == NSCommandKeyMask;
     bool altKey = (flags & NSAlternateKeyMask) == NSAlternateKeyMask;
+#else
+    // iOS has no keyboard modifier state at load time; use default behavior.
+    bool specialKeys = false;
+    bool altKey = false;
+#endif
     //NSLog(@"%lu -> %d", flags, altKey);
 
     //NSLog(@"%lu -> %d", flags, specialKeys);
@@ -2543,9 +2558,13 @@ unsigned char * nii_readMat(NSString * fname, struct nifti_1_header *nhdr)
         tagModality = @"impossible"; //retrieve list of ALL modalities...
         img = readMat(fname, tagModality, &nx, &ny, &nz, &dataType, tagnamelist, mat);
         if (tagnamelist.count < 1) {
+#if TARGET_OS_OSX
             NSAlert *alert = [[NSAlert alloc] init];
             [alert setMessageText:[@"There are no NiiStat format images in " stringByAppendingString:[fname lastPathComponent]] ];
             [alert runModal];
+#else
+            NSLog(@"There are no NiiStat format images in %@", [fname lastPathComponent]);
+#endif
             return NULL;
         }
         //NSUInteger indx = indexOfCaseInsensitiveString ( tagnamelist, modality);
@@ -2645,8 +2664,11 @@ unsigned char * nii_readForeignx(NSString * fname, struct nifti_1_header *niiHdr
     }
     if ( [ext caseInsensitiveCompare: @"MAT"] == NSOrderedSame )
         return nii_readMat(fname,  niiHdr);
+#if TARGET_OS_OSX
     if ([[NSImage alloc] initWithContentsOfFile:fname] != NULL) //last resort - is this an image format that OSX can read?
         return nii_readBitmap(fname,  niiHdr);
+#endif
+    // iOS: foreign standard-image (TIFF/JPEG/PNG) import not yet ported.
     return NULL;
 } //nii_readForeign()
 

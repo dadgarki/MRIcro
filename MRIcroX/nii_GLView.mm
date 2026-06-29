@@ -4,9 +4,6 @@
 #import "nii_render.h"
 #import "nii_img.h"
 #import "nii_reslice.h"
-#import <OpenGL/gl.h>
-#import <OpenGL/glext.h>
-#import <OpenGL/glu.h>
 #import <QuartzCore/QuartzCore.h>
 
 
@@ -288,48 +285,6 @@ NSArray * niiFileTypes () {
 }*/
 
 
-/*- (void)saveScreenshotFromFileName:(NSString *) file_name //save PNG screenshot, or capture to clipboard
- {
-     // Get the size of the image in a retina safe way
-     NII_PREFS *prefs =[gNiiImg getPREFS];
-     int q =prefs->rayCastQuality1to10;
-     prefs->rayCastQuality1to10 = 10;
-     prefs->force_refreshGL = true;
-     [self drawFrame];
-     
-     NSRect backRect = [self convertRectToBacking: [self bounds]];
-     int W = NSWidth(backRect);
-     int H = NSHeight(backRect);
-     // Create image. Note no alpha channel. I don't copy that.
-     NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes: NULL
-     pixelsWide: W pixelsHigh: H bitsPerSample: 8 samplesPerPixel: 3 hasAlpha: NO
-     isPlanar: NO colorSpaceName: NSCalibratedRGBColorSpace bytesPerRow: 3*W bitsPerPixel: 0];
-     // The following block does the actual reading of the image
-     glPushAttrib(GL_PIXEL_MODE_BIT); // Save state about reading buffers
-     glReadBuffer(GL_FRONT);
-     glPixelStorei(GL_PACK_ALIGNMENT, 1); // Dense packing
-     glReadPixels(0, 0, W, H, GL_RGB, GL_UNSIGNED_BYTE, [rep bitmapData]);
-     glPopAttrib();
-     //next: use core image to flip the image so it is rightside up
-     CIImage* ciimag = [[CIImage alloc] initWithBitmapImageRep: rep];
-     CGAffineTransform trans = CGAffineTransformIdentity;
-     trans = CGAffineTransformMakeTranslation(0.0f, H);
-     trans = CGAffineTransformScale(trans, 1.0, -1.0);
-     ciimag = [ciimag imageByApplyingTransform:trans];
-     rep = [[NSBitmapImageRep alloc] initWithCIImage: ciimag];//get data back from core image
-     if ([file_name length] < 1) { //save to clipboard
-         NSImage *imag = [[NSImage alloc] init];
-         [imag addRepresentation:rep];
-         NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
-         [pasteboard clearContents];
-         NSArray *copiedObjects = [NSArray arrayWithObject:imag];
-         [pasteboard writeObjects:copiedObjects];
-     } else {
-         NSData *data = [rep representationUsingType: NSPNGFileType properties: nil];
-         [data writeToFile: file_name atomically: NO];
-     }
-     prefs->rayCastQuality1to10 = q;
- }*/
 
 - (void)saveScreenshotFromFileName:(NSString *) file_name //save PNG screenshot, or capture to clipboard
 {
@@ -361,22 +316,8 @@ NSArray * niiFileTypes () {
         NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes: NULL
             pixelsWide: w pixelsHigh: h bitsPerSample: 8 samplesPerPixel: 3 hasAlpha: NO
             isPlanar: NO colorSpaceName: NSCalibratedRGBColorSpace bytesPerRow: 3*w bitsPerPixel: 0];
-        glPushAttrib(GL_PIXEL_MODE_BIT); // Save state about reading buffers
-        glReadBuffer(GL_FRONT);
-        glPixelStorei(GL_PACK_ALIGNMENT, 1); // Dense packing
-       //glFlush();
-       //glFinish();
-       glReadPixels(0, 0, w, h, GL_RGB, GL_UNSIGNED_BYTE, [rep bitmapData]); //use RGB to skip ALPHA
-        glPopAttrib();
-       //glFlush();
-       //glFinish();
-        //next: use core image to flip the image so it is rightside up
-        CIImage* ciimag = [[CIImage alloc] initWithBitmapImageRep: rep];
-        CGAffineTransform trans = CGAffineTransformIdentity;
-        trans = CGAffineTransformMakeTranslation(0.0f, h);
-        trans = CGAffineTransformScale(trans, 1.0, -1.0);
-        ciimag = [ciimag imageByApplyingTransform:trans];
-        rep = [[NSBitmapImageRep alloc] initWithCIImage: ciimag];//get data back from core image
+        // Metal: synchronous offscreen render into the rep (already top-down).
+        [gNiiImg metalScreenshotIntoRGB:[rep bitmapData] width:w height:h];
         NSGraphicsContext *context = [NSGraphicsContext graphicsContextWithBitmapImageRep: repz];
         [NSGraphicsContext saveGraphicsState];
         [NSGraphicsContext setCurrentContext: context];
@@ -713,53 +654,27 @@ NSArray * niiFileTypes () {
 
 - (void) drawFrame
 {
-    NSOpenGLContext    *currentContext = [self openGLContext];
-    [currentContext makeCurrentContext];
-    // must lock GL context because display link is threaded
-    CGLLockContext((CGLContextObj)[currentContext CGLContextObj]);
-    [gNiiImg doRedraw]; // Flush OpenGL context
-
-    
-    /*
-    NSString * string = [NSString stringWithFormat:@"VX %d", 123];
-    [infoStringTex setString:string withAttributes:stanStringAttrib];
-    [infoStringTex drawAtPoint:NSMakePoint (32, 32)];
-    string = [NSString stringWithFormat:@"Camera at (%0.1f)", 543.01];
-    [infoStringTex setString:string withAttributes:stanStringAttrib];
-    [infoStringTex drawAtPoint:NSMakePoint (64, 64)];*/
-    
-    //glFlush();
-    //[currentContext flushBuffer];
-    CGLUnlockContext((CGLContextObj)[currentContext CGLContextObj]);
+    [self setNeedsDisplay:YES]; // request an MTKView redraw -> drawInMTKView:
 }
 
-- (void) reshape { //resize
-    NSRect backingBounds = [self convertRectToBacking:[self bounds]];
-    GLsizei backingPixelWidth  = (GLsizei)(backingBounds.size.width);
-    GLsizei backingPixelHeight = (GLsizei)(backingBounds.size.height);
-    [gNiiImg setScreenWidHt: backingPixelWidth Height: backingPixelHeight];//2021
-    /*
-    [gNiiImg setScreenWidHt: [self bounds].size.width * self->retinaScaleFactor Height: [self bounds].size.height * self->retinaScaleFactor];//RetinaX 2016
-   */
-    //[gNiiImg setScreenWidHt: [self bounds].size.width Height: [self bounds].size.height];//2014
-    NSOpenGLContext    *currentContext = [self openGLContext];
-    [currentContext makeCurrentContext];
-    // remember to lock the context before we touch it since display link is threaded
-    CGLLockContext((CGLContextObj)[currentContext CGLContextObj]);
-    // let the context know we've changed size
-    [[self openGLContext] update];
-    CGLUnlockContext((CGLContextObj)[currentContext CGLContextObj]);
-    //NSLog(@"GLView->Reshape %f %f", [self bounds].size.width , [self bounds].size.height);//66666666
-    //self.view.frame.size.width
-    [super reshape];
-    //[gNiiImg setScreenWidHt: [self bounds].size.width Height: [self bounds].size.height];
-    //[self drawFrame]; //do this immediately - don't wait for timer!
-}
-
-- (void)drawRect:(NSRect)rect 
+- (void)mtkView:(MTKView *)view drawableSizeWillChange:(CGSize)size
 {
-    [super drawRect:rect]; //??
-    [self drawFrame];
+    [gNiiImg setScreenWidHt:(int)size.width Height:(int)size.height];
+}
+
+- (void)drawInMTKView:(MTKView *)view
+{
+    [gNiiImg redrawMetalInView:view]; // CPU data-prep + Metal render, no OpenGL
+}
+
+// MTKView has no -reshape (that's NSOpenGLView), but callers like
+// handleScreenChanges still invoke it. Update the render size + redraw.
+- (void) reshape
+{
+    CGSize ds = self.drawableSize;
+    if (ds.width > 0 && ds.height > 0)
+        [gNiiImg setScreenWidHt:(int)ds.width Height:(int)ds.height];
+    [self setNeedsDisplay:YES];
 }
 
 - (BOOL)acceptsFirstResponder
@@ -910,9 +825,16 @@ NSArray * niiFileTypes () {
 {
     //[self setAcceptsTouchEvents: YES];
 
-    
+
     gNiiImg = [nii_img alloc];
     gNiiImg = [gNiiImg init];
+    // Metal-backed main view: draw on demand (mirrors the old GL drawFrame model).
+    if (!self.device) self.device = MTLCreateSystemDefaultDevice();
+    self.colorPixelFormat = MTLPixelFormatRGBA8Unorm; // match the renderer's pipeline
+    self.framebufferOnly = NO;
+    self.enableSetNeedsDisplay = YES;
+    self.paused = YES;
+    self.delegate = self;
     [self updatePrefs];
     screenShotScaleFactor = 1.0f;
     //retinaScaleFactor = 1.0f;

@@ -1,5 +1,5 @@
 #import <Foundation/Foundation.h>
-#import <Cocoa/Cocoa.h>
+#import <CoreGraphics/CoreGraphics.h> // CGPoint (cross-platform; was Cocoa/NSPoint)
 
 /*http://www.otierney.net/objective-c.html
 NSString *str = @"v 0.1 10 s 20 30";
@@ -18,8 +18,8 @@ const int kMaxMosaicDim = 12;
     float HOverlap,VOverlap;
     double Slice[kMaxMosaicDim][kMaxMosaicDim];
     bool SliceIsMM, isLabel;
-    NSPoint TotalSizeInPixels;
-    NSPoint Pos[kMaxMosaicDim][kMaxMosaicDim];
+    CGPoint TotalSizeInPixels;
+    CGPoint Pos[kMaxMosaicDim][kMaxMosaicDim];
     int Orient[kMaxMosaicDim][kMaxMosaicDim];
 }
 -(void) str2Mosaic:(NSString*) list;

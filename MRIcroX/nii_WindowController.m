@@ -11,10 +11,6 @@
 #import "nii_timelineView.h"
 #import "MRIcroAppDelegate.h"
 
-#import <OpenGL/gl.h>
-#import <OpenGL/glext.h>
-#import <OpenGL/glu.h>
-
 @implementation NSAlert (Cat)
 
 -(NSInteger) runModalSheetForWindow:(NSWindow *)aWindow

@@ -154,6 +154,7 @@ uint32_t makeRGBAx (THIS_UINT8 r, THIS_UINT8 g, THIS_UINT8 b, THIS_UINT8 a)
 bool checkSandAccessX (NSString *file_name) {
     bool result = (!access([file_name UTF8String], R_OK) );
     if (result) return result; //already have access
+#if TARGET_OS_OSX
     NSOpenPanel *openPanel  = [NSOpenPanel openPanel];
     [openPanel setDirectoryURL: [[NSURL alloc] initWithString:file_name]];
     //NSLog(@"selecting : %@",[FName lastPathComponent] ); // [FName lastPathComponent]
@@ -168,6 +169,9 @@ bool checkSandAccessX (NSString *file_name) {
                       NULL, NULL, NULL,
                       @"%@"
                       , [@"You do not have access to the file " stringByAppendingString:[file_name lastPathComponent]]);
+#endif
+    // iOS grants file access via security-scoped URLs (UIDocumentPicker); no
+    // AppKit open-panel fallback.
     return result; //no access
 }
 

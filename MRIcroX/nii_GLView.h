@@ -1,14 +1,12 @@
-#import <OpenGL/gl.h>
 #import <Cocoa/Cocoa.h>
 #import "nii_img.h"
 #import "nii_timelineView.h"
 #import <QuartzCore/QuartzCore.h>
-//#include <OpenGL/gl.h>
-//#import "GLString.h"
+#import <MetalKit/MetalKit.h>
 
-
-
-@interface nii_GLView : NSOpenGLView
+// The view is Metal-backed (unified macOS + iPad renderer); the legacy
+// NSOpenGLView path was removed in the OpenGL→Metal migration.
+@interface nii_GLView : MTKView <MTKViewDelegate>
 {
 	//NSMutableDictionary * stanStringAttrib;
 	//GLString * infoStringTex;

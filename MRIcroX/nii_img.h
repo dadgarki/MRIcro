@@ -3,22 +3,25 @@
 #import <Foundation/Foundation.h>
 #include "nii_io.h"
 #include "nii_definetypes.h"
-#import <OpenGL/gl.h>
-#import <OpenGL/glext.h>
-#import "nii_timelineView.h"
-//#import <OpenGL/glu.h>
-#import "GLString.h"
+#include "nii_platform.h"
+#include "nii_graph.h" // GraphStruct (was nii_timelineView.h, which is AppKit/macOS-only)
+
+@class MTKView;
+@class NIIMetalRenderer;
 
 @interface nii_img : NSObject
 {
-	NSMutableDictionary * stanStringAttrib;
-	GLString * glStringTex;
     NSMutableArray * labelArray;
     FSLIO *fslio;
     NII_PREFS *prefs;
+    id _metalRenderer; // NIIMetalRenderer, one per window
 }
-//- (void) prepareOpenGL;
--(void) updateFont: (NSColor *) aColor;
+// Metal render entry points (the renderer is the only backend now).
+- (void) redrawMetalInView:(MTKView *)view; // CPU data-prep + Metal render
+// Render the current frame offscreen (synchronous) into RGB (3 bytes/px, top-
+// left origin) for screenshots. Returns NO if no renderer/volume.
+- (BOOL) metalScreenshotIntoRGB:(unsigned char *)dest width:(int)w height:(int)h;
+-(void) updateFont: (PlatformColor *) aColor;
 - (void) updateFontScale: (float) scale;
 -(bool) removeHaze;
 -(bool) sharpen;
@@ -55,7 +58,6 @@
 -(void) setViewMinMaxForLayer: (double) min Max: (double) max Layer: (int) layer; 
 -(void) setAzimElev: (int) azim Elev: (int) elev;
 -(void) setAzimElevInc: (int) azim Elev: (int) elev;
--(void) redraw2D; //private!
 -(bool) doRedraw; //redraw screen - returns true if any changes were required
 -(int)  nextOverlaySlot; //returns -1 if unable to load another overlay
 -(int)  addOverlay: (NSString *) file_name;
@@ -73,4 +75,5 @@
 
 -(FSLIO *) getFSLIO;
 -(NII_PREFS *) getPREFS;
+-(NSString *) getHeaderInfo; //human-readable summary of the loaded image header (dims, mm, datatype, range); empty string if none loaded
 @end

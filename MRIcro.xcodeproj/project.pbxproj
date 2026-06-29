@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 54;
+	objectVersion = 70;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -19,7 +19,6 @@
 		4F0E59611B95F1A5002BCD4A /* nii_ostu_ml.mm in Sources */ = {isa = PBXBuildFile; fileRef = 4F0E595F1B95F14A002BCD4A /* nii_ostu_ml.mm */; };
 		4F12CE5E1A195DB000408A12 /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 4F9A58A31609E769008ECBE2 /* main.m */; };
 		4F12CE5F1A195DB000408A12 /* nii_mosaic.mm in Sources */ = {isa = PBXBuildFile; fileRef = 4F7787F818AD5D360028CAE3 /* nii_mosaic.mm */; };
-		4F12CE611A195DB000408A12 /* GLString.m in Sources */ = {isa = PBXBuildFile; fileRef = 4FD0B0E418BEE67F0061FAD2 /* GLString.m */; };
 		4F12CE621A195DB000408A12 /* nii_label.mm in Sources */ = {isa = PBXBuildFile; fileRef = 4F3E85FD18BD7E76003B3515 /* nii_label.mm */; };
 		4F12CE631A195DB000408A12 /* MRIcroAppDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = 4F9A58A91609E769008ECBE2 /* MRIcroAppDelegate.m */; };
 		4F12CE651A195DB000408A12 /* nii_WindowController.m in Sources */ = {isa = PBXBuildFile; fileRef = 4F9A58B61609E7DC008ECBE2 /* nii_WindowController.m */; };
@@ -35,7 +34,6 @@
 		4F12CE6F1A195DB000408A12 /* nii_reslice.m in Sources */ = {isa = PBXBuildFile; fileRef = 4F6B23921609EC2B003D311C /* nii_reslice.m */; };
 		4F12CE701A195DB000408A12 /* nii_timelineView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4F70AC7616121AB90007FAB5 /* nii_timelineView.m */; };
 		4F12CE721A195DB000408A12 /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4F07BCC716160EE7000216B2 /* QuartzCore.framework */; };
-		4F12CE741A195DB000408A12 /* OpenGL.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4F9A58B81609E963008ECBE2 /* OpenGL.framework */; };
 		4F12CE751A195DB000408A12 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4F9A58961609E769008ECBE2 /* Cocoa.framework */; };
 		4F12CE771A195DB000408A12 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 4F9A589F1609E769008ECBE2 /* InfoPlist.strings */; };
 		4F12CE781A195DB000408A12 /* Credits.rtf in Resources */ = {isa = PBXBuildFile; fileRef = 4F9A58A51609E769008ECBE2 /* Credits.rtf */; };
@@ -65,25 +63,43 @@
 		4F9A58AD1609E769008ECBE2 /* MainMenu.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4F9A58AB1609E769008ECBE2 /* MainMenu.xib */; };
 		4F9A58B41609E786008ECBE2 /* MainWindow.xib in Resources */ = {isa = PBXBuildFile; fileRef = 4F9A58B31609E786008ECBE2 /* MainWindow.xib */; };
 		4F9A58B71609E7DC008ECBE2 /* nii_WindowController.m in Sources */ = {isa = PBXBuildFile; fileRef = 4F9A58B61609E7DC008ECBE2 /* nii_WindowController.m */; };
-		4F9A58B91609E963008ECBE2 /* OpenGL.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4F9A58B81609E963008ECBE2 /* OpenGL.framework */; };
 		4FB5AFD61A8A6544000196DD /* ujpeg.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4F90F9E21A6BFA3500E96843 /* ujpeg.cpp */; };
 		4FB5AFD71A8A6556000196DD /* jpg_0XC3.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4FC7949D1A6ADE2E00B2BA49 /* jpg_0XC3.cpp */; };
 		4FBD92E220165A5600A240B1 /* libz.1.2.5.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 4FBD92E120165A5600A240B1 /* libz.1.2.5.tbd */; };
 		4FC7949F1A6ADE2E00B2BA49 /* jpg_0XC3.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4FC7949D1A6ADE2E00B2BA49 /* jpg_0XC3.cpp */; };
 		4FCDFAEC18BCFD4700FB2F28 /* mricro.icns in Resources */ = {isa = PBXBuildFile; fileRef = 4FCDFAEB18BCFD4700FB2F28 /* mricro.icns */; };
-		4FD0B0E518BEE67F0061FAD2 /* GLString.m in Sources */ = {isa = PBXBuildFile; fileRef = 4FD0B0E418BEE67F0061FAD2 /* GLString.m */; };
 		4FD5883F1A9CE1A000D62F6A /* dcm2niiWindow.m in Sources */ = {isa = PBXBuildFile; fileRef = 4FE2EFC519E1C44900AA74C6 /* dcm2niiWindow.m */; };
-		7C917E0E2E0147A900C77E31 /* advanced_CT_shader.frag in Resources */ = {isa = PBXBuildFile; fileRef = 7C917E0D2E0147A100C77E31 /* advanced_CT_shader.frag */; };
-		7C917E0F2E0147A900C77E31 /* advanced_CT_shader.frag in Resources */ = {isa = PBXBuildFile; fileRef = 7C917E0D2E0147A100C77E31 /* advanced_CT_shader.frag */; };
-		7C917E112E0147B900C77E31 /* advanced_MR_shader.frag in Resources */ = {isa = PBXBuildFile; fileRef = 7C917E102E0147B300C77E31 /* advanced_MR_shader.frag */; };
-		7C917E122E0147B900C77E31 /* advanced_MR_shader.frag in Resources */ = {isa = PBXBuildFile; fileRef = 7C917E102E0147B300C77E31 /* advanced_MR_shader.frag */; };
-		7C917E142E0147CA00C77E31 /* default_shader.frag in Resources */ = {isa = PBXBuildFile; fileRef = 7C917E132E0147C500C77E31 /* default_shader.frag */; };
-		7C917E152E0147CA00C77E31 /* default_shader.frag in Resources */ = {isa = PBXBuildFile; fileRef = 7C917E132E0147C500C77E31 /* default_shader.frag */; };
-		7C917E172E0147D200C77E31 /* sobel_shader.frag in Resources */ = {isa = PBXBuildFile; fileRef = 7C917E162E0147CE00C77E31 /* sobel_shader.frag */; };
-		7C917E182E0147D200C77E31 /* sobel_shader.frag in Resources */ = {isa = PBXBuildFile; fileRef = 7C917E162E0147CE00C77E31 /* sobel_shader.frag */; };
 		7C917E1A2E014BD700C77E31 /* 00ShinyWhite.jpg in Resources */ = {isa = PBXBuildFile; fileRef = 7C917E192E014BD700C77E31 /* 00ShinyWhite.jpg */; };
 		7C917E1B2E014BD700C77E31 /* 00ShinyWhite.jpg in Resources */ = {isa = PBXBuildFile; fileRef = 7C917E192E014BD700C77E31 /* 00ShinyWhite.jpg */; };
+		7CE7BEAD0000000000000001 /* jpg_0XC3.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4FC7949D1A6ADE2E00B2BA49 /* jpg_0XC3.cpp */; };
+		7CE7BEAD0000000000000002 /* nii_mosaic.mm in Sources */ = {isa = PBXBuildFile; fileRef = 4F7787F818AD5D360028CAE3 /* nii_mosaic.mm */; };
+		7CE7BEAD0000000000000003 /* ujpeg.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4F90F9E21A6BFA3500E96843 /* ujpeg.cpp */; };
+		7CE7BEAD0000000000000004 /* nii_foreign.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1D51801C25B6084A00EF6FF8 /* nii_foreign.cpp */; };
+		7CE7BEAD0000000000000005 /* nii_label.mm in Sources */ = {isa = PBXBuildFile; fileRef = 4F3E85FD18BD7E76003B3515 /* nii_label.mm */; };
+		7CE7BEAD0000000000000006 /* nii_ostu_ml.mm in Sources */ = {isa = PBXBuildFile; fileRef = 4F0E595F1B95F14A002BCD4A /* nii_ostu_ml.mm */; };
+		7CE7BEAD0000000000000007 /* nii_dicom.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1D51802325B6085B00EF6FF8 /* nii_dicom.cpp */; };
+		7CE7BEAD0000000000000008 /* nifti1_io_core.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4F84E25019F46B3B00D95B28 /* nifti1_io_core.cpp */; };
+		7CE7BEAD0000000000000009 /* nii_dicom_batch.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1D51802225B6085B00EF6FF8 /* nii_dicom_batch.cpp */; };
+		7CE7BEAD000000000000000A /* nii_ortho.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4F84E24619F46AB900D95B28 /* nii_ortho.cpp */; };
+		7CE7BEAD000000000000000B /* nii_img.mm in Sources */ = {isa = PBXBuildFile; fileRef = 4F6B23881609EC2B003D311C /* nii_img.mm */; };
+		7CE7BEAD000000000000000C /* nii_foreignx.m in Sources */ = {isa = PBXBuildFile; fileRef = 4F56F8BD1EBCEF750087AB46 /* nii_foreignx.m */; };
+		7CE7BEAD000000000000000D /* nii_io.mm in Sources */ = {isa = PBXBuildFile; fileRef = 4F6B238A1609EC2B003D311C /* nii_io.mm */; };
+		7CE7BEAD000000000000000E /* nii_render.m in Sources */ = {isa = PBXBuildFile; fileRef = 4F6B23901609EC2B003D311C /* nii_render.m */; };
+		7CE7BEAD000000000000000F /* nii_reslice.m in Sources */ = {isa = PBXBuildFile; fileRef = 4F6B23921609EC2B003D311C /* nii_reslice.m */; };
+		7CE7BEAD0000000000000010 /* NIIMetalRenderer.mm in Sources */ = {isa = PBXBuildFile; fileRef = FACE000000000000000000F3 /* NIIMetalRenderer.mm */; };
+		7CE7BEAD0000000000000011 /* Shaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = FACE000000000000000000F4 /* Shaders.metal */; };
+		7CE7BEAD0000000000000012 /* NIIMetalText.mm in Sources */ = {isa = PBXBuildFile; fileRef = FACE000000000000000000F9 /* NIIMetalText.mm */; };
 		83E45AB122F6EE030065DA40 /* libz.1.2.11.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 83E45AB022F6EE030065DA40 /* libz.1.2.11.tbd */; };
+		FACE000000000000000000B3 /* NIIMetalRenderer.mm in Sources */ = {isa = PBXBuildFile; fileRef = FACE000000000000000000F3 /* NIIMetalRenderer.mm */; };
+		FACE000000000000000000B4 /* Shaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = FACE000000000000000000F4 /* Shaders.metal */; };
+		FACE000000000000000000B5 /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FACE000000000000000000F5 /* Metal.framework */; };
+		FACE000000000000000000B6 /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FACE000000000000000000F6 /* MetalKit.framework */; };
+		FACE000000000000000000B8 /* NIIMetalText.mm in Sources */ = {isa = PBXBuildFile; fileRef = FACE000000000000000000F9 /* NIIMetalText.mm */; };
+		FACE000000000000000000C1 /* NIIMetalRenderer.mm in Sources */ = {isa = PBXBuildFile; fileRef = FACE000000000000000000F3 /* NIIMetalRenderer.mm */; };
+		FACE000000000000000000C2 /* Shaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = FACE000000000000000000F4 /* Shaders.metal */; };
+		FACE000000000000000000C4 /* NIIMetalText.mm in Sources */ = {isa = PBXBuildFile; fileRef = FACE000000000000000000F9 /* NIIMetalText.mm */; };
+		FACE000000000000000000C6 /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FACE000000000000000000F5 /* Metal.framework */; };
+		FACE000000000000000000C7 /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FACE000000000000000000F6 /* MetalKit.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -155,24 +171,40 @@
 		4F9A58B31609E786008ECBE2 /* MainWindow.xib */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.xib; path = MainWindow.xib; sourceTree = "<group>"; };
 		4F9A58B51609E7DC008ECBE2 /* nii_WindowController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = nii_WindowController.h; sourceTree = "<group>"; };
 		4F9A58B61609E7DC008ECBE2 /* nii_WindowController.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = nii_WindowController.m; sourceTree = "<group>"; };
-		4F9A58B81609E963008ECBE2 /* OpenGL.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = OpenGL.framework; path = System/Library/Frameworks/OpenGL.framework; sourceTree = SDKROOT; };
 		4FBD92E120165A5600A240B1 /* libz.1.2.5.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libz.1.2.5.tbd; path = usr/lib/libz.1.2.5.tbd; sourceTree = SDKROOT; };
 		4FC7949D1A6ADE2E00B2BA49 /* jpg_0XC3.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = jpg_0XC3.cpp; sourceTree = "<group>"; };
 		4FC7949E1A6ADE2E00B2BA49 /* jpg_0XC3.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = jpg_0XC3.h; sourceTree = "<group>"; };
 		4FCDFAEB18BCFD4700FB2F28 /* mricro.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = mricro.icns; sourceTree = "<group>"; };
-		4FD0B0E318BEE67F0061FAD2 /* GLString.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = GLString.h; sourceTree = "<group>"; };
-		4FD0B0E418BEE67F0061FAD2 /* GLString.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = GLString.m; sourceTree = "<group>"; };
 		4FE1562F1F38958600C33F3E /* print.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = print.h; sourceTree = "<group>"; };
 		4FE2EFC419E1C44900AA74C6 /* dcm2niiWindow.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = dcm2niiWindow.h; sourceTree = "<group>"; };
 		4FE2EFC519E1C44900AA74C6 /* dcm2niiWindow.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = dcm2niiWindow.m; sourceTree = "<group>"; };
-		7C917E0D2E0147A100C77E31 /* advanced_CT_shader.frag */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.glsl; path = advanced_CT_shader.frag; sourceTree = "<group>"; };
-		7C917E102E0147B300C77E31 /* advanced_MR_shader.frag */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.glsl; path = advanced_MR_shader.frag; sourceTree = "<group>"; };
-		7C917E132E0147C500C77E31 /* default_shader.frag */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.glsl; path = default_shader.frag; sourceTree = "<group>"; };
-		7C917E162E0147CE00C77E31 /* sobel_shader.frag */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.glsl; path = sobel_shader.frag; sourceTree = "<group>"; };
 		7C917E192E014BD700C77E31 /* 00ShinyWhite.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = 00ShinyWhite.jpg; sourceTree = "<group>"; };
+		7CE7BE102FE4F67600B16440 /* MRIcroPad.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MRIcroPad.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		83510658237C228100444E7E /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = Base; path = Base.lproj/MainMenu.xib; sourceTree = "<group>"; };
 		83E45AB022F6EE030065DA40 /* libz.1.2.11.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libz.1.2.11.tbd; path = usr/lib/libz.1.2.11.tbd; sourceTree = SDKROOT; };
+		FACE000000000000000000F1 /* nii_platform.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = nii_platform.h; sourceTree = "<group>"; };
+		FACE000000000000000000F2 /* NIIMetalRenderer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = NIIMetalRenderer.h; sourceTree = "<group>"; };
+		FACE000000000000000000F3 /* NIIMetalRenderer.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; path = NIIMetalRenderer.mm; sourceTree = "<group>"; };
+		FACE000000000000000000F4 /* Shaders.metal */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.metal; path = Shaders.metal; sourceTree = "<group>"; };
+		FACE000000000000000000F5 /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
+		FACE000000000000000000F6 /* MetalKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = System/Library/Frameworks/MetalKit.framework; sourceTree = SDKROOT; };
+		FACE000000000000000000F9 /* NIIMetalText.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; path = NIIMetalText.mm; sourceTree = "<group>"; };
+		FACE000000000000000000FA /* NIIMetalText.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = NIIMetalText.h; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		7CE7BE282FE4F67700B16440 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 7CE7BE0F2FE4F67600B16440 /* MRIcroPad */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		7CE7BE112FE4F67600B16440 /* MRIcroPad */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (7CE7BE282FE4F67700B16440 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = MRIcroPad; sourceTree = "<group>"; };
+/* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		4F12CE711A195DB000408A12 /* Frameworks */ = {
@@ -181,7 +213,8 @@
 			files = (
 				4FBD92E220165A5600A240B1 /* libz.1.2.5.tbd in Frameworks */,
 				4F12CE721A195DB000408A12 /* QuartzCore.framework in Frameworks */,
-				4F12CE741A195DB000408A12 /* OpenGL.framework in Frameworks */,
+				FACE000000000000000000C6 /* Metal.framework in Frameworks */,
+				FACE000000000000000000C7 /* MetalKit.framework in Frameworks */,
 				4F12CE751A195DB000408A12 /* Cocoa.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -192,8 +225,16 @@
 			files = (
 				83E45AB122F6EE030065DA40 /* libz.1.2.11.tbd in Frameworks */,
 				4F07BCC816160EE7000216B2 /* QuartzCore.framework in Frameworks */,
-				4F9A58B91609E963008ECBE2 /* OpenGL.framework in Frameworks */,
+				FACE000000000000000000B5 /* Metal.framework in Frameworks */,
+				FACE000000000000000000B6 /* MetalKit.framework in Frameworks */,
 				4F9A58971609E769008ECBE2 /* Cocoa.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7CE7BE0D2FE4F67600B16440 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -216,6 +257,7 @@
 				4FCDFAEB18BCFD4700FB2F28 /* mricro.icns */,
 				4F07BCC716160EE7000216B2 /* QuartzCore.framework */,
 				4F9A589C1609E769008ECBE2 /* MRIcro */,
+				7CE7BE112FE4F67600B16440 /* MRIcroPad */,
 				4F9A58951609E769008ECBE2 /* Frameworks */,
 				4F9A58931609E769008ECBE2 /* Products */,
 			);
@@ -226,6 +268,7 @@
 			children = (
 				4F9A58921609E769008ECBE2 /* MRIcro.app */,
 				4F12CE7F1A195DB000408A12 /* MRIcro.app */,
+				7CE7BE102FE4F67600B16440 /* MRIcroPad.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -233,11 +276,12 @@
 		4F9A58951609E769008ECBE2 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				FACE000000000000000000F5 /* Metal.framework */,
+				FACE000000000000000000F6 /* MetalKit.framework */,
 				1DE093C025C4638E00050474 /* libbz2.tbd */,
 				1DBA7B47259F8C9500D015D2 /* libiconv.2.tbd */,
 				83E45AB022F6EE030065DA40 /* libz.1.2.11.tbd */,
 				4FBD92E120165A5600A240B1 /* libz.1.2.5.tbd */,
-				4F9A58B81609E963008ECBE2 /* OpenGL.framework */,
 				4F9A58961609E769008ECBE2 /* Cocoa.framework */,
 				4F9A58981609E769008ECBE2 /* Other Frameworks */,
 			);
@@ -257,10 +301,12 @@
 		4F9A589C1609E769008ECBE2 /* MRIcro */ = {
 			isa = PBXGroup;
 			children = (
-				7C917E162E0147CE00C77E31 /* sobel_shader.frag */,
-				7C917E132E0147C500C77E31 /* default_shader.frag */,
-				7C917E102E0147B300C77E31 /* advanced_MR_shader.frag */,
-				7C917E0D2E0147A100C77E31 /* advanced_CT_shader.frag */,
+				FACE000000000000000000F4 /* Shaders.metal */,
+				FACE000000000000000000FA /* NIIMetalText.h */,
+				FACE000000000000000000F9 /* NIIMetalText.mm */,
+				FACE000000000000000000F3 /* NIIMetalRenderer.mm */,
+				FACE000000000000000000F2 /* NIIMetalRenderer.h */,
+				FACE000000000000000000F1 /* nii_platform.h */,
 				1D22124225C0B8AD00184A2C /* MRIcroRelease.entitlements */,
 				4FE1562F1F38958600C33F3E /* print.h */,
 				1D51802225B6085B00EF6FF8 /* nii_dicom_batch.cpp */,
@@ -277,8 +323,6 @@
 				4FC7949D1A6ADE2E00B2BA49 /* jpg_0XC3.cpp */,
 				4F90F9E31A6BFA3500E96843 /* ujpeg.h */,
 				4F90F9E21A6BFA3500E96843 /* ujpeg.cpp */,
-				4FD0B0E318BEE67F0061FAD2 /* GLString.h */,
-				4FD0B0E418BEE67F0061FAD2 /* GLString.m */,
 				4F1C368118A7586000CE8008 /* MySplitViewController.h */,
 				4F1C368218A7586000CE8008 /* MySplitViewController.m */,
 				4F2D981119DEE86E00631700 /* tinydir.h */,
@@ -369,6 +413,28 @@
 			productReference = 4F9A58921609E769008ECBE2 /* MRIcro.app */;
 			productType = "com.apple.product-type.application";
 		};
+		7CE7BE0F2FE4F67600B16440 /* MRIcroPad */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7CE7BE292FE4F67700B16440 /* Build configuration list for PBXNativeTarget "MRIcroPad" */;
+			buildPhases = (
+				7CE7BE0C2FE4F67600B16440 /* Sources */,
+				7CE7BE0D2FE4F67600B16440 /* Frameworks */,
+				7CE7BE0E2FE4F67600B16440 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				7CE7BE112FE4F67600B16440 /* MRIcroPad */,
+			);
+			name = MRIcroPad;
+			packageProductDependencies = (
+			);
+			productName = MRIcroPad;
+			productReference = 7CE7BE102FE4F67600B16440 /* MRIcroPad.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -396,6 +462,9 @@
 							};
 						};
 					};
+					7CE7BE0F2FE4F67600B16440 = {
+						CreatedOnToolsVersion = 26.5;
+					};
 				};
 			};
 			buildConfigurationList = 4F9A588C1609E769008ECBE2 /* Build configuration list for PBXProject "MRIcro" */;
@@ -413,6 +482,7 @@
 			targets = (
 				4F9A58911609E769008ECBE2 /* MRIcro */,
 				4F12CE5B1A195DB000408A12 /* MRIcroPro */,
+				7CE7BE0F2FE4F67600B16440 /* MRIcroPad */,
 			);
 		};
 /* End PBXProject section */
@@ -426,14 +496,10 @@
 				1D2281EB25B5DD4400A0F24A /* standard in Resources */,
 				4F12CE771A195DB000408A12 /* InfoPlist.strings in Resources */,
 				4F12CE781A195DB000408A12 /* Credits.rtf in Resources */,
-				7C917E152E0147CA00C77E31 /* default_shader.frag in Resources */,
-				7C917E112E0147B900C77E31 /* advanced_MR_shader.frag in Resources */,
 				4F12CE791A195DB000408A12 /* MainMenu.xib in Resources */,
 				7C917E1A2E014BD700C77E31 /* 00ShinyWhite.jpg in Resources */,
-				7C917E182E0147D200C77E31 /* sobel_shader.frag in Resources */,
 				4F12CE7A1A195DB000408A12 /* MainWindow.xib in Resources */,
 				4F12CE7B1A195DB000408A12 /* mricro.icns in Resources */,
-				7C917E0E2E0147A900C77E31 /* advanced_CT_shader.frag in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -445,14 +511,17 @@
 				1D2281D825B5DCC900A0F24A /* standard in Resources */,
 				4F9A58A11609E769008ECBE2 /* InfoPlist.strings in Resources */,
 				4F9A58A71609E769008ECBE2 /* Credits.rtf in Resources */,
-				7C917E142E0147CA00C77E31 /* default_shader.frag in Resources */,
-				7C917E122E0147B900C77E31 /* advanced_MR_shader.frag in Resources */,
 				4F9A58AD1609E769008ECBE2 /* MainMenu.xib in Resources */,
 				7C917E1B2E014BD700C77E31 /* 00ShinyWhite.jpg in Resources */,
-				7C917E172E0147D200C77E31 /* sobel_shader.frag in Resources */,
 				4F9A58B41609E786008ECBE2 /* MainWindow.xib in Resources */,
 				4FCDFAEC18BCFD4700FB2F28 /* mricro.icns in Resources */,
-				7C917E0F2E0147A900C77E31 /* advanced_CT_shader.frag in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7CE7BE0E2FE4F67600B16440 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -467,7 +536,6 @@
 				4F12CE5E1A195DB000408A12 /* main.m in Sources */,
 				4F12CE5F1A195DB000408A12 /* nii_mosaic.mm in Sources */,
 				4F90F9E41A6BFA3500E96843 /* ujpeg.cpp in Sources */,
-				4F12CE611A195DB000408A12 /* GLString.m in Sources */,
 				1D51801E25B6084A00EF6FF8 /* nii_foreign.cpp in Sources */,
 				4F12CE621A195DB000408A12 /* nii_label.mm in Sources */,
 				4F0E59611B95F1A5002BCD4A /* nii_ostu_ml.mm in Sources */,
@@ -487,6 +555,9 @@
 				4F12CE6E1A195DB000408A12 /* nii_render.m in Sources */,
 				4F12CE6F1A195DB000408A12 /* nii_reslice.m in Sources */,
 				4F12CE701A195DB000408A12 /* nii_timelineView.m in Sources */,
+				FACE000000000000000000C1 /* NIIMetalRenderer.mm in Sources */,
+				FACE000000000000000000C2 /* Shaders.metal in Sources */,
+				FACE000000000000000000C4 /* NIIMetalText.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -497,7 +568,6 @@
 				4FB5AFD71A8A6556000196DD /* jpg_0XC3.cpp in Sources */,
 				4F9A58A41609E769008ECBE2 /* main.m in Sources */,
 				4F7787F918AD5D360028CAE3 /* nii_mosaic.mm in Sources */,
-				4FD0B0E518BEE67F0061FAD2 /* GLString.m in Sources */,
 				4F3E85FE18BD7E76003B3515 /* nii_label.mm in Sources */,
 				4F9A58AA1609E769008ECBE2 /* MRIcroAppDelegate.m in Sources */,
 				4F9A58B71609E7DC008ECBE2 /* nii_WindowController.m in Sources */,
@@ -515,6 +585,34 @@
 				4F6B23991609EC2B003D311C /* nii_render.m in Sources */,
 				4F6B239A1609EC2B003D311C /* nii_reslice.m in Sources */,
 				4F70AC7716121AB90007FAB5 /* nii_timelineView.m in Sources */,
+				FACE000000000000000000B3 /* NIIMetalRenderer.mm in Sources */,
+				FACE000000000000000000B4 /* Shaders.metal in Sources */,
+				FACE000000000000000000B8 /* NIIMetalText.mm in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7CE7BE0C2FE4F67600B16440 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7CE7BEAD0000000000000001 /* jpg_0XC3.cpp in Sources */,
+				7CE7BEAD0000000000000002 /* nii_mosaic.mm in Sources */,
+				7CE7BEAD0000000000000003 /* ujpeg.cpp in Sources */,
+				7CE7BEAD0000000000000004 /* nii_foreign.cpp in Sources */,
+				7CE7BEAD0000000000000005 /* nii_label.mm in Sources */,
+				7CE7BEAD0000000000000006 /* nii_ostu_ml.mm in Sources */,
+				7CE7BEAD0000000000000007 /* nii_dicom.cpp in Sources */,
+				7CE7BEAD0000000000000008 /* nifti1_io_core.cpp in Sources */,
+				7CE7BEAD0000000000000009 /* nii_dicom_batch.cpp in Sources */,
+				7CE7BEAD000000000000000A /* nii_ortho.cpp in Sources */,
+				7CE7BEAD000000000000000B /* nii_img.mm in Sources */,
+				7CE7BEAD000000000000000C /* nii_foreignx.m in Sources */,
+				7CE7BEAD000000000000000D /* nii_io.mm in Sources */,
+				7CE7BEAD000000000000000E /* nii_render.m in Sources */,
+				7CE7BEAD000000000000000F /* nii_reslice.m in Sources */,
+				7CE7BEAD0000000000000010 /* NIIMetalRenderer.mm in Sources */,
+				7CE7BEAD0000000000000011 /* Shaders.metal in Sources */,
+				7CE7BEAD0000000000000012 /* NIIMetalText.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -832,6 +930,154 @@
 			};
 			name = Release;
 		};
+		7CE7BE262FE4F67700B16440 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CODE_SIGN_STYLE = Manual;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = "";
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_PRECOMPILE_PREFIX_HEADER = YES;
+				GCC_PREFIX_HEADER = "MRIcroX/MRIcro-Prefix.pch";
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+					STRIP_DCM2NII,
+					myDisableJasper,
+					myDisableOpenJPEG,
+					myDisableMiniZ,
+				);
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/MRIcroX",
+				);
+				INFOPLIST_FILE = MRIcroPad/Info.plist;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MARKETING_VERSION = 1.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				OTHER_LDFLAGS = (
+					"-framework",
+					Metal,
+					"-framework",
+					MetalKit,
+					"-framework",
+					UniformTypeIdentifiers,
+					"-lz",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = www.mricro.com.MRIcro.MRIcroPad;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		7CE7BE272FE4F67700B16440 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CODE_SIGN_STYLE = Manual;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_NS_ASSERTIONS = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_PRECOMPILE_PREFIX_HEADER = YES;
+				GCC_PREFIX_HEADER = "MRIcroX/MRIcro-Prefix.pch";
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					STRIP_DCM2NII,
+					myDisableJasper,
+					myDisableOpenJPEG,
+					myDisableMiniZ,
+				);
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/MRIcroX",
+				);
+				INFOPLIST_FILE = MRIcroPad/Info.plist;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MARKETING_VERSION = 1.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				OTHER_LDFLAGS = (
+					"-framework",
+					Metal,
+					"-framework",
+					MetalKit,
+					"-framework",
+					UniformTypeIdentifiers,
+					"-lz",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = www.mricro.com.MRIcro.MRIcroPad;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -858,6 +1104,15 @@
 			buildConfigurations = (
 				4F9A58B11609E769008ECBE2 /* Debug */,
 				4F9A58B21609E769008ECBE2 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		7CE7BE292FE4F67700B16440 /* Build configuration list for PBXNativeTarget "MRIcroPad" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7CE7BE262FE4F67700B16440 /* Debug */,
+				7CE7BE272FE4F67700B16440 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

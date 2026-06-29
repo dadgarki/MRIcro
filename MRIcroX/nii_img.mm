@@ -10,45 +10,71 @@
 #import "nii_ortho.h"
 #import "nii_reslice.h"
 #include "nii_definetypes.h"
-#import  "nii_timelineView.h"
 #include "nii_ostu_ml.h"
 #import "nii_mosaic.h"
 #import "nii_label.h"
-#import <OpenGL/glu.h>
-//#import "GLString.h"
 #ifdef NII_IMG_RENDER //from nii_definetypes
     #import "nii_render.h"
 #endif
+#import <MetalKit/MetalKit.h>
+#import "NIIMetalRenderer.h"
+#import "NIIMetalText.h"
+#import "nii_platform.h"
+#if TARGET_OS_OSX
+    #import <Cocoa/Cocoa.h>
+#else
+    #import <UIKit/UIKit.h>
+#endif
+
+// Display backing scale (Retina factor), used to size Metal-rasterized text.
+static CGFloat niiBackingScale(void) {
+#if TARGET_OS_OSX
+    CGFloat s = [[NSScreen mainScreen] backingScaleFactor];
+#else
+    CGFloat s = [[UIScreen mainScreen] scale];
+#endif
+    return (s < 1.0) ? 1.0 : s;
+}
 
 @implementation nii_img
 
-- (IBAction)closePopup
+// Transient "toast" notifications used the deprecated macOS NSUserNotification
+// API. They are macOS-only here; the iPad UIKit layer will surface equivalents
+// (e.g. a transient banner) in Phase 4. Guarded so the controller compiles for iOS.
+- (void)closePopup
 {
+#if TARGET_OS_OSX
     [[NSUserNotificationCenter defaultUserNotificationCenter] removeAllDeliveredNotifications];
+#endif
 }
 
-- (IBAction)notifyOpenFailed;
+- (void)notifyOpenFailed;
 {
+#if TARGET_OS_OSX
     NSUserNotification *notification = [[NSUserNotification alloc] init];
     notification.title = @"Unable to read image";
     notification.informativeText = @"Unknown image format";
     notification.soundName = NULL;
     [[NSUserNotificationCenter defaultUserNotificationCenter] deliverNotification:notification];
     [NSTimer scheduledTimerWithTimeInterval: 4.0  target:self selector: @selector(closePopup) userInfo:self repeats:NO];
+#endif
 }
 
-- (IBAction)notifyNotAllVolumesLoaded: (int) loadedVols RawVols: (int) rawVols;
+- (void)notifyNotAllVolumesLoaded: (int) loadedVols RawVols: (int) rawVols;
 {
+#if TARGET_OS_OSX
     NSUserNotification *notification = [[NSUserNotification alloc] init];
     notification.title = [NSString stringWithFormat:@"Loaded %d of %d volumes", loadedVols, rawVols];
     notification.informativeText = @"Reason: The preference 'Only initial volumes' is selected";
     notification.soundName = NULL;
     [[NSUserNotificationCenter defaultUserNotificationCenter] deliverNotification:notification];
     [NSTimer scheduledTimerWithTimeInterval: 4.5  target:self selector: @selector(closePopup) userInfo:self repeats:NO];
+#endif
 }
 
-- (IBAction)notifyDICOMwarning;
+- (void)notifyDICOMwarning;
 {
+#if TARGET_OS_OSX
     NSUserNotification *notification = [[NSUserNotification alloc] init];
     notification.title = @"DICOM image";
 #ifndef STRIP_DCM2NII // /BuildSettings/PreprocessorMacros/STRIP_DCM2NII
@@ -64,6 +90,7 @@
     notification.soundName = NULL;
     [[NSUserNotificationCenter defaultUserNotificationCenter] deliverNotification:notification];
     [NSTimer scheduledTimerWithTimeInterval: 4.0  target:self selector: @selector(closePopup) userInfo:self repeats:NO];
+#endif
 }
 
 -(bool) is2D {
@@ -231,6 +258,7 @@ void frac2mm (float frac[4], NII_PREFS* prefs, bool sliceCenter)
 
 -(GraphStruct) getTimeline {
     GraphStruct graph;
+    graph.data = NULL; // so early returns (no graph) leave a safe-to-free pointer
     prefs->updatedTimeline = false;
     graph.timepoints = prefs->numVolumes;
     graph.selectedTimepoint = prefs->currentVolume;
@@ -1747,27 +1775,31 @@ void computeGradientsCPU (NII_PREFS* prefs, uint32_t *img) {
 #endif
 
 void computeGradients (NII_PREFS* prefs, uint32_t *img, bool isOverlay) {
-    if ((prefs->voxelDim[1] < 5) || (prefs->voxelDim[2]<5) || (prefs->voxelDim[3] < 5)) return;
+    // Gradients are computed by the Metal Sobel compute kernel
+    // (NIIMetalRenderer recomputeGradients, driven by the volume-upload hook).
+    (void)prefs; (void)img; (void)isOverlay;
+}
 
-    //if ((prefs->numOverlay > 0) && ~ isOverlay) return;
-#ifdef MY_USE_GLSL_FOR_GRADIENTS //defined in nii_render.h
-    //just copy raw texture, and process this
-    if (isOverlay)
-        prefs->glslUpdateGradientsOverlay = true;
-    else
-        prefs->glslUpdateGradientsBG = true;
-#else
-    computeGradientsCPU(prefs, img);
-#endif
-    if (isOverlay)
-        prefs->gradientOverlay3D = bindSubGL(prefs, img, prefs->gradientOverlay3D);
-    else
-        prefs->gradientTexture3D = bindSubGL(prefs, img, prefs->gradientTexture3D);
+// Per-window upload target. Set by redrawMetalInView before recalc, so the
+// recalcSub* upload hooks feed THIS window's renderer (not a shared singleton).
+static NIIMetalRenderer *gCurrentRenderer = nil;
+static void niiMetalUploadVolumeToCurrent(NII_PREFS *prefs, const void *data) {
+    if (!gCurrentRenderer || !data) return;
+    [gCurrentRenderer uploadIntensityVolume:data dims:prefs->voxelDim];
+    [gCurrentRenderer recomputeGradients]; // intensity + (if present) overlay gradients
+}
+// Upload (overdata != NULL) or clear (NULL) the overlay layer so the advanced
+// shader's overlay pass samples real overlay voxels (texture 1) and their Sobel
+// gradient (texture 3) instead of falling back to the intensity volume.
+static void niiMetalUploadOverlayToCurrent(NII_PREFS *prefs, const void *overdata) {
+    if (!gCurrentRenderer) return;
+    [gCurrentRenderer uploadOverlayVolume:overdata dims:prefs->voxelDim];
 }
 
 void blendOverlays(NII_PREFS* prefs, uint32_t *data)
 {
     prefs->numOverlay = 0;
+    niiMetalUploadOverlayToCurrent(prefs, NULL); // clear any prior overlay layer
     if (prefs->overlayFrac == 0) return; //overlays do not contribute to image
     //NSLog(@"test %d ", ((255*0) + (255*255)) >> 8);
     int numOverlay = 0;
@@ -1813,16 +1845,12 @@ void blendOverlays(NII_PREFS* prefs, uint32_t *data)
         }
     }
     computeBlend(data, overdata, nvox, prefs->overlayFrac);
-    
-        prefs->intensityOverlay3D = bindSubGL(prefs, overdata, prefs->intensityOverlay3D);
-        //THIS_UINT8 *img8bit = (THIS_UINT8 *) malloc(nvox);
-        //for (size_t v = 0; v < nvox; v++)
-        //    img8bit[v] = overdata[v] & 0xFF; // (data[v] >> 24) & 0xFF
-        //computeGradients ( prefs, img8bit, overdata, true);
-        //free(img8bit);
-    if (prefs->advancedRender) {
-        computeGradients ( prefs, overdata,  true);
-    }
+        // overlay voxels are blended into `data` (for 2D slices + the background
+        // ray-cast pass), AND uploaded as a SEPARATE overlay layer so the advanced
+        // shader's overlay pass can depth-composite it (matches the GL path's
+        // intensityOverlay3D + its Sobel gradient).
+    niiMetalUploadOverlayToCurrent(prefs, overdata); // recomputeGradients (run after
+        // the intensity upload in recalcSubGL) then computes the overlay gradient too.
     delete[] overdata;//2014 free(overdata);
 }
 
@@ -1843,27 +1871,8 @@ void recalcSubGL(NII_PREFS* prefs, THIS_UINT8 *img8bit, tRGBAlut lut)
 #ifdef MY_DEBUG //from nii_io.h
     NSLog(@"blendSec = %f", [[NSDate date] timeIntervalSinceDate:methodStart]);
 #endif
-    prefs->intensityTexture3D = bindSubGL(prefs, data, prefs->intensityTexture3D);
-
-    //if (prefs->advancedRender) computeGradients ( prefs, img8bit, data,false);
-    if (prefs->advancedRender)
-            computeGradients ( prefs, data,false);
-     else {
-        if (prefs->gradientTexture3D != 0) glDeleteTextures(1,&prefs->gradientTexture3D);
-        prefs->gradientTexture3D = 0;
-        if (prefs->gradientOverlay3D != 0) glDeleteTextures(1,&prefs->gradientOverlay3D);
-        prefs->gradientOverlay3D = 0;
-        //if (prefs->intensityOverlay3D != 0) glDeleteTextures(1,&prefs->intensityOverlay3D);
-        //prefs->intensityOverlay3D = 0;
-    }
+    niiMetalUploadVolumeToCurrent(prefs, data); // per-window Metal renderer (uploads + recomputes gradients)
     delete[] data;
-    //check this worked...
-    //glGetTexLevelParameteriv(GL_PROXY_TEXTURE_3D, 0, GL_TEXTURE_WIDTH, &gli);
-    //    if (gli < 1) {
-    //        NSLog(@"Your video card is unable to load an image that is this large");
-    //        return(EXIT_FAILURE);
-    //    }
-    //printf("handle %d\n",handle);
 }
 
 void rescaleRGBA(NII_PREFS* prefs, uint32_t *rawdata)
@@ -1923,63 +1932,14 @@ void rescaleRGBA(NII_PREFS* prefs, uint32_t *rawdata)
         *ptr++ = lut[ *rawptr++];//scale blue
         *ptr++ = *rawptr++; //leave alpha unchanged...
     }
-  glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA8, prefs->voxelDim[1], prefs->voxelDim[2], prefs->voxelDim[3], 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+  (void)data; // GL upload removed; Metal uploads the RGBA volume directly (recalcGL)
 
 delete[] data;
 }
 
-GLuint recalcSubRGBA(NII_PREFS* prefs, uint32_t *data, GLuint oldHandle)
-{
-    GLuint handle;
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    if (oldHandle != 0) glDeleteTextures(1,&oldHandle);
-    glGenTextures(1, &handle);
-    glBindTexture(GL_TEXTURE_3D, handle);
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);//21 GL_CLAMP_TO_BORDER);//?
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);//21 GL_CLAMP_TO_BORDER);//?
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);//21 GL_CLAMP_TO_BORDER);//?
-    if ((fabs(prefs->viewMin- 0.0) < 0.01) && (fabs(prefs->viewMax-255)<0.01 ) ) //no need to rescale image brightness/contrast
-        glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA8, prefs->voxelDim[1], prefs->voxelDim[2], prefs->voxelDim[3], 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
-    else
-        rescaleRGBA(prefs, data);
-    return handle;
-}
+// recalcSubRGBA (GL 3D-texture upload of an RGBA volume) removed — under Metal
+// the RGBA volume is uploaded straight from recalcGL via niiMetalUploadVolumeToCurrent.
 
-GLuint loadMatCap(NII_PREFS* prefs, GLuint oldHandle) {
-    
-    NSString * imagePath = [[NSBundle mainBundle] pathForResource:@"00ShinyWhite" ofType:@"jpg"];
-    NSImage * image = [[NSImage alloc] initWithContentsOfFile:imagePath];
-    NSBitmapImageRep *bitmapRep = [image bestRepresentationForRect:NSMakeRect(0, 0, image.size.width, image.size.height) context:nil hints:nil];
-    const unsigned char *imageData = [bitmapRep bitmapData]; // The raw image data
-    
-    GLuint handle;
-    if (prefs->matcap2D != 0) {
-        glDeleteTextures(1, &oldHandle);
-    }
-    glGenTextures(1, &handle);
-    glBindTexture(GL_TEXTURE_2D, handle);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-    
-    NSInteger width = [bitmapRep pixelsWide];
-    NSInteger height = [bitmapRep pixelsHigh];
-    // Upload the image data to the OpenGL texture
-    glTexImage2D(GL_TEXTURE_2D,
-                 0,                  // Level of detail
-                 GL_RGBA,            // Internal format
-                 (GLsizei)width,     // Width of the texture
-                 (GLsizei)height,    // Height of the texture
-                 0,                  // Border (must be 0)
-                 GL_RGBA,            // Format of the pixel data
-                 GL_UNSIGNED_BYTE,   // Data type of the pixel data
-                 imageData);         // Raw pixel data
-    
-    return handle;
-}
 
 int recalcGL(FSLIO* fslio, NII_PREFS* prefs)
 {
@@ -2038,9 +1998,7 @@ int recalcGL(FSLIO* fslio, NII_PREFS* prefs)
     double maxRaw = nii_cal2raw(fslio->niftiptr-> scl_inter, fslio->niftiptr-> scl_slope, prefs->viewMax);
     if (fslio->niftiptr->datatype == DT_RGBA32) {
         uint32_t *data = (uint32_t *) fslio->niftiptr->data;
-        prefs->intensityTexture3D = recalcSubRGBA(prefs, data, prefs->intensityTexture3D);
-        if (prefs->advancedRender)
-            computeGradients ( prefs, data,false);
+        niiMetalUploadVolumeToCurrent(prefs, data); // per-window Metal renderer (RGB)
     } else {
         THIS_UINT8 *img8bit = (THIS_UINT8 *) malloc(prefs->voxelDim[1]*prefs->voxelDim[2]*prefs->voxelDim[3]);
         size_t volOffset = prefs->currentVolume;
@@ -2051,9 +2009,7 @@ int recalcGL(FSLIO* fslio, NII_PREFS* prefs)
         recalcSubGL(prefs,img8bit, prefs->lut);
         free(img8bit);
     }
-    
-    prefs->matcap2D = loadMatCap(prefs, prefs->matcap2D);
-    
+    // (matcap is loaded once per renderer via NIIMetalRenderer loadMatcapFromBundle)
 #ifdef MY_DEBUG
     NSLog(@"recalcGL_Sec = %f", [[NSDate date] timeIntervalSinceDate:methodStart]);
 #endif
@@ -2196,138 +2152,10 @@ int nii_setup(FSLIO* fslio, NII_PREFS* prefs)
     return ret;
 }
 
-void drawXBar (int lX, int lY, int lW,int lH, float lXFrac, float lYFrac, long Xgap, CGFloat XColor[4])
-//draws crosshair that is horizontally at XFrac and Vertically at YFrac
-//given box with corner at lX,lY, Width of lW and Height of lH
-{
-    if (Xgap < 0) return;
-    glDisable (GL_TEXTURE_3D);
-    glDisable (GL_BLEND);
-    //float lYp = (lYFrac * lH);
-    //float lXp = (lXFrac * lW);
-    int lYp = round(lYFrac * lH);
-    int lXp = round(lXFrac * lW);
-    //printf("scale %f ht %d pix %f\n",lYFrac,lH, lYp);
-    glLineWidth(2.0);
-    glColor4f(XColor[0],XColor[1],XColor[2],1.0f);
-    glBegin(GL_LINES); //draw crosshairs...
-    //bottom vert
-    glVertex3f(lX+lXp,  lY, 0.0);
-    glVertex3f(lX+lXp, lY+lYp-Xgap, 0.0);
-    //left horz
-    glVertex3f(lX, lY+lYp, 0.0);
-    glVertex3f(lX+lXp-Xgap, lY+lYp, 0.0);
-    //top vert
-    glVertex3f(lX+lXp,  lY+lYp+Xgap, 0.0);
-    glVertex3f(lX+lXp, lY+lH, 0.0);
-    //right horz
-    glVertex3f(lX+lXp+Xgap, lY+lYp, 0.0);
-    glVertex3f(lX+lW, lY+lYp, 0.0);
-    glEnd();
-}
-
-void drawSagMirror (int lX, int lY, int lW, int lH, double lSlice[4], long Xgap, CGFloat XColor[4])
-//Display a SAGITTAL slice at X pixels from left, Y pixels from bottom, W wide, H high, lSlice is 0..1 - fractional slice
-// assumes texture bound to OpenGL: glBindTexture(GL_TEXTURE_3D, prefs->intensityTexture3D);
-{
-    glEnable (GL_TEXTURE_3D);
-    glColor3f(1.0f, 1.0f, 1.0f);
-    glBegin(GL_QUADS);
-    glTexCoord3d (lSlice[1],0,1);
-    glVertex2f(lX+lW,lY+lH);
-    glTexCoord3d (lSlice[1],0, 0);
-    glVertex2f(lX+lW,lY);
-    glTexCoord3d (lSlice[1], 1, 0);
-    glVertex2f(lX,lY);
-    glTexCoord3d (lSlice[1],1, 1);
-    glVertex2f(lX,lY+lH);
-    glEnd();
-    if (Xgap >= 0)
-        drawXBar (lX, lY, lW, lH, 1-lSlice[2], lSlice[3], Xgap, XColor);
-}
-
-void drawSag (int lX, int lY, int lW, int lH, double lSlice[4], long Xgap, CGFloat XColor[4])
-//Display a SAGITTAL slice at X pixels from left, Y pixels from bottom, W wide, H high, lSlice is 0..1 - fractional slice
-//  assumes texture bound to OpenGL: glBindTexture(GL_TEXTURE_3D, prefs->intensityTexture3D);
-{
-    glEnable(GL_ALPHA_TEST);
-    glAlphaFunc(GL_GREATER, 0.01);
-    glEnable (GL_TEXTURE_3D);
-    glColor3f(1.0f, 1.0f, 1.0f);
-    glBegin(GL_QUADS);
-    glTexCoord3d (lSlice[1],0,1);
-    glVertex2f(lX,lY+lH);
-    glTexCoord3d (lSlice[1],0, 0);
-    glVertex2f(lX,lY);
-    glTexCoord3d (lSlice[1], 1, 0);
-    glVertex2f(lX+lW,lY);
-    glTexCoord3d (lSlice[1],1, 1);
-    glVertex2f(lX+lW,lY+lH);
-    glEnd();
-    glDisable(GL_ALPHA_TEST);
-    if (Xgap > 0)
-        drawXBar (lX, lY, lW, lH, lSlice[2], lSlice[3], Xgap, XColor);
-}
-
-void drawAx (int lX,int lY, int lW, int lH, double lSlice[4], long Xgap, CGFloat XColor[4], bool flipLR)
-//Display an Axial slice at X pixels from left, Y pixels from bottom, W wide, H high, lSlice is 0..1 - fractional slice
-//  assumes texture bound to OpenGL: glBindTexture(GL_TEXTURE_3D, prefs->intensityTexture3D);
-{
-    glEnable(GL_ALPHA_TEST);
-    glAlphaFunc(GL_GREATER, 0.01);
-    glEnable (GL_TEXTURE_3D);
-    glColor3f(1.0f, 1.0f, 1.0f);
-    float flip = 0;
-    if (flipLR) flip = 1; //radiological
-    glBegin(GL_QUADS);
-    glTexCoord3d (flip, 1, lSlice[3]);
-    glVertex2f(lX,lY+lH);
-    glTexCoord3d (flip,0, lSlice[3]);
-    glVertex2f(lX,lY);
-    glTexCoord3d (1-flip,0,lSlice[3]);
-    glVertex2f(lX+lW,lY);
-    glTexCoord3d (1-flip,1, lSlice[3]);
-    glVertex2f(lX+lW,lY+lH);
-    glEnd();
-    glDisable(GL_ALPHA_TEST);
-    if ((Xgap > 0) && flipLR)
-        drawXBar (lX, lY, lW, lH, 1.0 - lSlice[1], lSlice[2], Xgap, XColor);//Xgap
-    else if (Xgap > 0)
-        drawXBar (lX, lY, lW, lH, lSlice[1], lSlice[2], Xgap, XColor);//Xgap
-}
-
-void drawCoro (int lX, int lY, int lW,int lH, double lSlice[4], long Xgap, CGFloat XColor[4], bool flipLR)
-//Display a CORONAL slice at X pixels from left, Y pixels from bottom, W wide, H high, lSlice is 0..1 - fractional slice
-//  assumes texture bound to OpenGL: glBindTexture(GL_TEXTURE_3D, prefs->intensityTexture3D);
-{
-    glEnable(GL_ALPHA_TEST);
-    glAlphaFunc(GL_GREATER, 0.01);
-    glEnable (GL_TEXTURE_3D);
-    glColor3f(1.0f, 1.0f, 1.0f);
-    float flip = 0;
-    if (flipLR) flip = 1; //radiological
-    glBegin(GL_QUADS);
-    glTexCoord3d (flip, lSlice[2], 1);
-    glVertex2f(lX,lY+lH);
-    glTexCoord3d (flip,lSlice[2], 0);
-    glVertex2f(lX,lY);
-    glTexCoord3d (1-flip,lSlice[2],0);
-    glVertex2f(lX+lW,lY);
-    glTexCoord3d (1-flip,lSlice[2], 1);
-    glVertex2f(lX+lW,lY+lH);
-    glEnd();
-    glDisable(GL_ALPHA_TEST);
-    if ((Xgap > 0) && flipLR)
-        drawXBar (lX, lY, lW, lH, 1.0-lSlice[1], lSlice[3], Xgap, XColor);
-    else if (Xgap > 0)
-        drawXBar (lX, lY, lW, lH, lSlice[1], lSlice[3], Xgap, XColor);
-}
-
-void setRGBColor (uint32_t clr)
-{
-    glColor4ub((clr) & 0xff, (clr >> 8) & 0xff, (clr >> 16) & 0xff, (clr >> 24) & 0xff);
-    //glColor4ub((clr >> 24) & 0xff, (clr >> 16) & 0xff, (clr >> 8) & 0xff, 255);
-}
+// GL slice/crosshair draw helpers (drawXBar/drawSag/drawSagMirror/drawAx/
+// drawCoro) and setRGBColor were removed in the Metal migration — the Metal
+// renderer draws 2D slices, crosshairs and the mosaic itself (see
+// NIIMetalRenderer encodeSliceAt:/encodeCrosshairs:/drawMosaicSliceOrient:).
 
 float getMaxFloatXYZ(float v1, float v2, float v3)
 {
@@ -2458,21 +2286,6 @@ void scrnSize (NII_PREFS* prefs) {
     }
 }
 
-void enter2D (int width, int height, int offsetX, int offsetY) //Enter2D = reshapeGL
-{
-    glDisable(GL_DEPTH_TEST);
-    //    glViewport(0, 0, width, height);
-    glViewport(offsetX, offsetY, width, height);
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    glOrtho(0, width, 0, height,-10, 10);//gluOrtho2D(0, width, 0, height);
-    glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
-    glEnable (GL_BLEND); //blend transparency bar with background
-    glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    //glDisable(GL_DEPTH_TEST);
-}
-
 float  defuzzz(float x)
 {
     if (fabs(x) < 1.0E-6) return 0.0;
@@ -2530,209 +2343,6 @@ double getOverlayVoxelIntensity(long long vox, int overlayIndex, NII_PREFS* pref
     return result;
 }
 
--(void) drawVolumeLabelTex {
-    NSString * intensityStr = [self getIntensityStr];
-    NSString * string;
-    if (prefs->numVolumes < 2)
-        string = [NSString stringWithFormat:@"%g\u00D7%g\u00D7%g=%@",  defuzzz(prefs->mm[1]), defuzzz(prefs->mm[2]), defuzzz(prefs->mm[3]), intensityStr];
-    else
-        string = [NSString stringWithFormat:@"%g\u00D7%g\u00D7%g=%@ %d/%d",  defuzzz(prefs->mm[1]), defuzzz(prefs->mm[2]), defuzzz(prefs->mm[3]), intensityStr,  prefs->currentVolume, prefs->numVolumes];
-    //if (prefs->numVolumes < 2)
-    //    string = [NSString stringWithFormat:@"%g x %g x %g = %@",  defuzzz(prefs->mm[1]), defuzzz(prefs->mm[2]), defuzzz(prefs->mm[3]), intensityStr];
-    //else
-    //    string = [NSString stringWithFormat:@"%g x %g x %g = %@ %d/%d",  defuzzz(prefs->mm[1]), defuzzz(prefs->mm[2]), defuzzz(prefs->mm[3]), intensityStr,  prefs->currentVolume, prefs->numVolumes];
-    [glStringTex setString:string withAttributes:stanStringAttrib];
-    //[glStringTex drawAtPoint:NSMakePoint (6, 24)];
-    [glStringTex drawAboveLeftOfPoint:NSMakePoint (prefs->scrnWid-8, 4)];
-}
-
-void drawVector (int lX, int lY, int lXo, int lYo, CGFloat XColor[4]) {
-    glColor4f(XColor[0],XColor[1],XColor[2],1.0f);
-    glBegin(GL_LINES); //draw crosshairs...
-    //top vert
-    glVertex3f(lX+lXo,  lY+lYo, 0.0);
-    glVertex3f(lX, lY, 0.0);
-    glEnd();
-} //drawVector()
-
-void drawVectors (int dimX, int dimY, int dimZ, CGFloat Vec[3], CGFloat XColor[4], bool viewRadiological) {
-    int min = dimX;
-    if (dimY < min) min = dimY;
-    if (dimZ < min) min = dimZ;
-    min = min / 2;
-    //adjust vector length
-    Vec[0] = Vec[0]*min;
-    if (viewRadiological)
-        Vec[0] = -Vec[0];
-    Vec[1] = Vec[1]*min;
-    Vec[2] = Vec[2]*min;
-    glLineWidth(5);
-    //on coronal
-    drawVector (dimX/2, dimY+(dimZ/2), Vec[0], Vec[2],XColor);
-    //on axial
-    drawVector (dimX/2, dimY/2, Vec[0], Vec[1],XColor);
-    //on sagittal
-    drawVector (dimX+ (dimY/2), dimY+(dimZ/2), Vec[1], Vec[2],XColor);
-} //drawVectors
-
--(void) drawOrientLabelTex {
-    if (prefs->scrnDim[1] < 16) return;
-    if ((fslio->niftiptr->dim[1] < 2) || (fslio->niftiptr->dim[2] < 2) || (fslio->niftiptr->dim[3] < 2)) return;
-    if (fslio->niftiptr->sform_code == NIFTI_XFORM_UNKNOWN) return;
-    glDisable (GL_TEXTURE_3D); //draw 2D text
-    if (prefs->viewRadiological)
-        [glStringTex setString:@"R" withAttributes:stanStringAttrib];
-    else
-        [glStringTex setString:@"L" withAttributes:stanStringAttrib];
-    switch (prefs->displayModeGL) {
-        case   GL_2D_AXIAL:
-            [glStringTex drawRightOfPoint:NSMakePoint (8, prefs->scrnDim[2] /2)];
-            return;
-        case  GL_2D_CORONAL:
-            //[glStringTex setString:@"L" withAttributes:stanStringAttrib];
-            [glStringTex drawRightOfPoint:NSMakePoint (8, prefs->scrnDim[3] /2)];
-            return;
-        case   GL_2D_SAGITTAL:
-            //2016
-            return;
-    }
-
-    if  (prefs->scrnDim[2] > 16) //draw L/R on Axial
-        [glStringTex drawRightOfPoint:NSMakePoint (8, prefs->scrnDim[2] /2)];
-    if  (!(prefs->scrnWideLayout) && (prefs->scrnDim[3] > 16)) //draw L/R on Coronal
-        [glStringTex drawRightOfPoint:NSMakePoint (8, prefs->scrnDim[2]+(prefs->scrnDim[3]/2) )];
-    [glStringTex setString:@"A" withAttributes:stanStringAttrib];
-    if (prefs->scrnDim[3] > 16) //draw A/P on Axial
-        [glStringTex drawBelowPoint:NSMakePoint (prefs->scrnDim[1]/2, prefs->scrnDim[2] )];
-    if (prefs->scrnWideLayout) {
-        if (prefs->viewRadiological)
-            [glStringTex setString:@"R" withAttributes:stanStringAttrib];
-        else
-            [glStringTex setString:@"L" withAttributes:stanStringAttrib];
-        if  (prefs->scrnDim[3] > 16) //draw L/R on Coronal
-            [glStringTex drawRightOfPoint:NSMakePoint (8+prefs->scrnDim[1], prefs->scrnDim[3]/2 )];
-        [glStringTex setString:@"S" withAttributes:stanStringAttrib];
-        if  (prefs->scrnDim[3] > 16) //draw S/I on Coronal
-            [glStringTex drawBelowPoint:NSMakePoint (prefs->scrnDim[1]+prefs->scrnDim[1]/2, prefs->scrnDim[3] )];
-
-        return;
-    }
-    [glStringTex setString:@"S" withAttributes:stanStringAttrib];
-    if  (prefs->scrnDim[3] > 16) //draw S/I on Coronal
-        [glStringTex drawBelowPoint:NSMakePoint (prefs->scrnDim[1]/2, prefs->scrnDim[2]+prefs->scrnDim[3] )];
-
-}
-
-/*
-void drawRuler (double mmPerPix, CGFloat XColor[4])
-//draws 10cm ruler
-{
-    if (mmPerPix <= 0) return;
-    double pix10cm = 100.0 * mmPerPix;
-    NSLog(@" %g mm/px 10cm = %g px", mmPerPix, pix10cm);
-    int lineWidth = pix10cm / 100;
-    lineWidth = MAX(lineWidth, 1);
-    lineWidth = MIN(lineWidth, 5);
-    float margin = pix10cm / 10;
-    margin = MAX(margin, 2);
-    if ((lineWidth % 2) == 0)
-        margin += 0.5;
-    int tickHeight = lineWidth * 2;
-    glDisable (GL_TEXTURE_3D);
-    glDisable (GL_BLEND);
-    glLineWidth(lineWidth);
-    glColor4f(XColor[0],XColor[1],XColor[2],1.0f);
-    glBegin(GL_LINES); //draw crosshairs...
-    glVertex3f(margin, margin, 0.0);
-    glVertex3f(margin+round(pix10cm), margin, 0.0);
-    for (int i = 0; i < 11; i++) {
-        float x = margin + round(double(i)/10.0 * pix10cm);
-        float yLine = margin;
-        float y = margin + tickHeight;
-        if ((i % 5) == 0) {
-            yLine -= tickHeight;
-            y += tickHeight;
-        }
-        glVertex3f(x, yLine, 0.0);
-        glVertex3f(x, y, 0.0);
-        
-    }
-    glEnd();
-}*/
-
--(void) redraw2D {//to do: radiological orientation
-    enter2D(prefs->scrnWid,prefs->scrnHt, prefs->scrnOffsetX, prefs->scrnOffsetY);
-    glDisable (GL_BLEND); //ignore Alpha for 2D slices...
-    glEnable (GL_TEXTURE_3D);
-    #ifdef MY_SHOW_GRADIENTS //defined in nii_render.h
-    if (prefs->advancedRender)
-        glBindTexture(GL_TEXTURE_3D, prefs->gradientTexture3D);
-    else
-        glBindTexture(GL_TEXTURE_3D, prefs->intensityTexture3D);
-    #else
-    glBindTexture(GL_TEXTURE_3D, prefs->intensityTexture3D);
-    #endif
-    //glBindTexture(GL_TEXTURE_RECTANGLE_EXT, prefs->intensityTexture3D);
-    if (!prefs->isSmooth2D) {
-        glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    }
-    glColor3f(1.0f, 1.0f, 1.0f);
-    switch (prefs->displayModeGL) {
-        case   GL_2D_AXIAL:
-            drawAx(0,0,prefs->scrnDim[1],prefs->scrnDim[2], prefs->sliceFrac, prefs->xBarGap, prefs->xBarColor, prefs->viewRadiological);
-            break;
-        case  GL_2D_CORONAL:
-            drawCoro(0,0,prefs->scrnDim[1],prefs->scrnDim[3], prefs->sliceFrac, prefs->xBarGap, prefs->xBarColor, prefs->viewRadiological);
-            break;
-        case   GL_2D_SAGITTAL:
-            drawSag(0,0,prefs->scrnDim[2],prefs->scrnDim[3], prefs->sliceFrac, prefs->xBarGap, prefs->xBarColor);
-            break;
-        default:
-            if (prefs->scrnWideLayout) {
-                drawAx(0,0,prefs->scrnDim[1],prefs->scrnDim[2], prefs->sliceFrac, prefs->xBarGap, prefs->xBarColor, prefs->viewRadiological);
-                drawCoro(prefs->scrnDim[1],0,prefs->scrnDim[1],prefs->scrnDim[3], prefs->sliceFrac, prefs->xBarGap, prefs->xBarColor, prefs->viewRadiological);
-                drawSag(2*prefs->scrnDim[1],0,prefs->scrnDim[2],prefs->scrnDim[3], prefs->sliceFrac, prefs->xBarGap, prefs->xBarColor);
-
-            } else {
-                drawCoro(0,prefs->scrnDim[2],prefs->scrnDim[1],prefs->scrnDim[3], prefs->sliceFrac, prefs->xBarGap, prefs->xBarColor, prefs->viewRadiological);
-                drawSag(prefs->scrnDim[1],prefs->scrnDim[2],prefs->scrnDim[2],prefs->scrnDim[3], prefs->sliceFrac, prefs->xBarGap, prefs->xBarColor);
-                drawAx(0,0,prefs->scrnDim[1],prefs->scrnDim[2], prefs->sliceFrac, prefs->xBarGap, prefs->xBarColor, prefs->viewRadiological);
-                if (self.is2D)
-                    drawHistogram(prefs, prefs->scrnDim[1], prefs->scrnDim[2], prefs->scrnDim[2]);
-            }
-
-    }
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    
-    //double fieldOfViewMM[4]; //Field of View in mm for X(1), Y(2) and Z (3) dimensions - FOV[0] unused
-    //int scrnDim[4];//size of X,Y,Z in pixels
-    /*int fovDim = 1; //dimension with largest FOV 1,2,3 X,Y,Z
-    if (prefs->fieldOfViewMM[2] > prefs->fieldOfViewMM[fovDim]) fovDim = 2;
-    if (prefs->fieldOfViewMM[3] > prefs->fieldOfViewMM[fovDim]) fovDim = 3;
-    //float vox10cm = ;
-    NSLog(@"Screen %d vox = %g mm", prefs->scrnDim[fovDim], prefs->fieldOfViewMM[fovDim]);
-    */
-
-    
-    
-    if (prefs->numDtiV >= prefs->currentVolume) {
-        CGFloat color[4] = {0.9, 0.9,0.1,0.9};
-        CGFloat v[3] = {prefs->dtiV[prefs->currentVolume-1][0],prefs->dtiV[prefs->currentVolume-1][1],prefs->dtiV[prefs->currentVolume-1][2]};
-        drawVectors(prefs->scrnDim[1],prefs->scrnDim[2],prefs->scrnDim[3],v, color, prefs->viewRadiological);
-    }
-    //drawVector(33,33,44,44, prefs->xBarColor);
-    //if ((prefs->showInfo) && (fslio->niftiptr->intent_code != NIFTI_INTENT_LABEL) )
-    if (prefs->showInfo) {
-        if (fslio->niftiptr->intent_code != NIFTI_INTENT_LABEL) drawColorBarTex(prefs, glStringTex, stanStringAttrib, !(GL_2D_AND_3D == prefs->displayModeGL));
-        [self drawVolumeLabelTex];
-        //drawRuler(prefs->mmPerPix, prefs->xBarColor);
-    }
-
-    if (prefs->showOrient)
-        [self drawOrientLabelTex];
-}
 
 double Slicemm2frac (double mm, int orient, NII_PREFS* prefs) {
     if ((prefs->voxelDim[1] < 1) || (prefs->voxelDim[2] < 1) || (prefs->voxelDim[3] < 1) ) return 0.5;
@@ -2763,110 +2373,98 @@ double  defuzzz(double x) {
     return x;
 }
 
--(void) mosaicPrepGL: (int) width Height:(int)height; {
-    recalcGL(fslio, prefs);//2015 <- make sure we bind textures later
-    //doShaderBlurSobel (prefs);
-    prefs->glslUpdateGradientsBG = false;
-    prefs->glslUpdateGradientsOverlay = false;
-    glClearColor(prefs->backColor[0],prefs->backColor[1],prefs->backColor[2],0.5);
-    glClear(GL_COLOR_BUFFER_BIT);
-    //enter2D(width,height);
-    enter2D(prefs->scrnWid,prefs->scrnHt, prefs->scrnOffsetX, prefs->scrnOffsetY);
-    //glDisable (GL_BLEND); //ignore Alpha for 2D slices...
-    //glPushAttrib (GL_ENABLE_BIT);
-    glEnable (GL_TEXTURE_3D);
-    glBindTexture(GL_TEXTURE_3D, prefs->intensityTexture3D);
-    glDisable (GL_BLEND);
-    glAlphaFunc(GL_GREATER,1/255);
-    glEnable(GL_ALPHA_TEST);
-}
 
--(void)redrawMosaic:(mosaicObj*) mos;
-{
-    //recalcGL(fslio, prefs); //<- done in mosaicPrepGL
-    //rows ascending for positive overlap, descending for negative overlap
-    //[self drawSag](floor(22),floor(22),prefs->scrnDim[2],prefs->scrnDim[3], 1, -1, prefs->xBarColor);
-    int rInc = 1;
-    int rStart = 1;
-    int rEnd = kMaxMosaicDim;
-    if (mos->VOverlap < 0) {
-        rStart = kMaxMosaicDim-1;
-        rEnd = 0;
-        rInc = -1;
-    }
-    int cInc = 1;
-    int cStart = 1;
-    int cEnd = kMaxMosaicDim;
-    if (mos->HOverlap < 0) {
-        cStart = kMaxMosaicDim-1;
-        cEnd = 0;
-        cInc = -1;
-    }
-    for (int r = rStart; r != rEnd; r+=rInc) {
-        for (int c = cStart; c != cEnd; c+=cInc) {
-            double sliceFrac1 = mos->Slice[r][c];
-            int orient = mos->Orient[r][c];
+// Metal counterpart of redrawMosaic + makeMosaic's GL-FBO readback: render the
+// slice montage offscreen into the per-window renderer, read it back (top-origin
+// RGBA) and copy the image to the clipboard. Reuses the renderer's already-
+// uploaded intensity volume (no recalcGL needed — the same voxels, new slices).
+- (void) makeMosaicMetal:(mosaicObj*)mos width:(int)width height:(int)height {
+    NIIMetalRenderer *r = (NIIMetalRenderer *)_metalRenderer;
+    if (!r || ![r beginMosaicFrameWidth:width height:height prefs:prefs]) return;
+    // Pass order matches redrawMosaic: rows/cols ascending for positive overlap,
+    // descending for negative, so later cells overwrite earlier ones identically.
+    int rInc = 1, rStart = 1, rEnd = kMaxMosaicDim;
+    if (mos->VOverlap < 0) { rStart = kMaxMosaicDim-1; rEnd = 0; rInc = -1; }
+    int cInc = 1, cStart = 1, cEnd = kMaxMosaicDim;
+    if (mos->HOverlap < 0) { cStart = kMaxMosaicDim-1; cEnd = 0; cInc = -1; }
+    for (int row = rStart; row != rEnd; row += rInc) {
+        for (int c = cStart; c != cEnd; c += cInc) {
+            int orient = mos->Orient[row][c];
+            if (orient < 1) continue;
+            double sliceFrac1 = mos->Slice[row][c];
             if (mos->SliceIsMM)
-                sliceFrac1 = Slicemm2frac (sliceFrac1, orient, prefs);
-            double sliceFrac[4];
-            if (orient == 1) //axial
-                sliceFrac[3] = sliceFrac1;
-            else if (orient == 2) //coronal
-                sliceFrac[2] = sliceFrac1;
-            else //sagittal of sagittal mirror
-                sliceFrac[1] = sliceFrac1;
-            if (mos->Orient[r][c] == 1)
-                drawAx(round(mos->Pos[r][c].x),round(mos->Pos[r][c].y),prefs->voxelDim[1],prefs->voxelDim[2], sliceFrac, -1, prefs->xBarColor, prefs->viewRadiological);
-            if (mos->Orient[r][c] == 2)
-                drawCoro(round(mos->Pos[r][c].x),round(mos->Pos[r][c].y),prefs->voxelDim[1],prefs->voxelDim[3], sliceFrac, -1, prefs->xBarColor, prefs->viewRadiological);
-            if (mos->Orient[r][c] == 3)
-                drawSag(round(mos->Pos[r][c].x),round(mos->Pos[r][c].y),prefs->voxelDim[2],prefs->voxelDim[3], sliceFrac, -1, prefs->xBarColor);
-            if (mos->Orient[r][c] == 4)
-                drawSagMirror(round(mos->Pos[r][c].x),round(mos->Pos[r][c].y),prefs->voxelDim[2],prefs->voxelDim[3], sliceFrac, -1, prefs->xBarColor);
-        }//for each colmn
-    } //for each row
-    //draw labels on second pass - so not hidden by overlay
-    if (!mos->isLabel) return;
-    //NSLog(@"labels");
-    glDisable(GL_TEXTURE_3D);
-    //drawVolumeLabel(prefs);
-    //int textSize = prefs->voxelDim[1]; //find smallest dimension
-    //if (textSize > prefs->voxelDim[2]) textSize = prefs->voxelDim[2];
-    //if (textSize > prefs->voxelDim[3]) textSize = prefs->voxelDim[3];
-    //textSize = (textSize / 256)+1;
-    //glLoadIdentity();
-    //glDisable(GL_ALPHA_TEST);
-    for (int r = rStart; r != rEnd; r+=rInc) {
-        for (int c = cStart; c != cEnd; c+=cInc) {
-            if (mos->Orient[r][c] > 0) {
-                double sliceFrac1 = mos->Slice[r][c];
-                //if (mos->SliceIsMM)
-                //    sliceFrac1 = Slicemm2frac (sliceFrac1, orient, prefs);
-                float wid = prefs->voxelDim[1];
-                float ht= prefs->voxelDim[3];
-                if (mos->Orient[r][c] == 1)
-                    ht = prefs->voxelDim[2];
-                if (mos->Orient[r][c] > 2)
-                    wid = prefs->voxelDim[3];
-                /*char lS[255] = { '\0' };
-                sprintf(lS, "%g",  sliceFrac1);
-                textArrow (round(mos->Pos[r][c].x+ wid/2),round(mos->Pos[r][c].y+ht),textSize,lS,-2, prefs);
-                 glLoadIdentity();
-                 */
-                NSString * string = [NSString stringWithFormat:@"%g", sliceFrac1];
-                [glStringTex setString:string withAttributes:stanStringAttrib];
-                [glStringTex drawBelowPoint:NSMakePoint (mos->Pos[r][c].x+ wid/2,mos->Pos[r][c].y+ht)];
+                sliceFrac1 = Slicemm2frac(sliceFrac1, orient, prefs);
+            double sliceFrac[4] = {0,0,0,0};
+            if (orient == 1)      sliceFrac[3] = sliceFrac1; // axial
+            else if (orient == 2) sliceFrac[2] = sliceFrac1; // coronal
+            else                  sliceFrac[1] = sliceFrac1; // sagittal / mirror
+            [r drawMosaicSliceOrient:orient
+                                   x:round(mos->Pos[row][c].x) y:round(mos->Pos[row][c].y)
+                                   w:(orient == 1 || orient == 2) ? prefs->voxelDim[1] : prefs->voxelDim[2]
+                                   h:(orient == 1) ? prefs->voxelDim[2] : prefs->voxelDim[3]
+                           sliceFrac:sliceFrac prefs:prefs];
+        }
+    }
+    // Slice-position labels (second pass so they sit atop the slices).
+    if (mos->isLabel) {
+        id<MTLDevice> dev = r.device; // reuse the renderer's device (no per-draw device creation)
+        CGFloat fs = niiBackingScale();
+        float bgLum = (prefs->backColor[0] + prefs->backColor[1] + prefs->backColor[2]) / 3.0f;
+        simd_float4 tint = (bgLum > 0.5f) ? (simd_float4){0,0,0,1} : (simd_float4){1,1,1,1};
+        for (int row = rStart; row != rEnd; row += rInc) {
+            for (int c = cStart; c != cEnd; c += cInc) {
+                if (mos->Orient[row][c] < 1) continue;
+                float wid = (mos->Orient[row][c] > 2) ? prefs->voxelDim[3] : prefs->voxelDim[1];
+                float ht  = (mos->Orient[row][c] == 1) ? prefs->voxelDim[2] : prefs->voxelDim[3];
+                NSString *str = [NSString stringWithFormat:@"%g", mos->Slice[row][c]];
+                NIIMetalText *t = [[NIIMetalText alloc] initWithString:str pointSize:(14*fs) device:dev];
+                if (t.texture) { // drawBelowPoint: centered, top at the point
+                    float px = mos->Pos[row][c].x + wid/2.0f, py = mos->Pos[row][c].y + ht;
+                    [r drawGlyphTexture:t.texture width:t.pixelWidth height:t.pixelHeight
+                                    atX:(px - t.pixelWidth/2.0f) y:(py - t.pixelHeight) tint:tint];
+                }
             }
-        }//for each colmn
-    } //for each row
-    //glFlush();     // Flush all OpenGL calls - we will have the NSOpenGLView do this
-} //redrawMosaic
+        }
+    }
+    void *rgba = [r endOffscreenReadback];
+    if (!rgba) return;
+    // Readback is top-origin already (no CIImage flip needed, unlike the GL FBO).
+#if TARGET_OS_OSX
+    NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL
+        pixelsWide:width pixelsHigh:height bitsPerSample:8 samplesPerPixel:3 hasAlpha:NO
+        isPlanar:NO colorSpaceName:NSCalibratedRGBColorSpace bytesPerRow:3*width bitsPerPixel:0];
+    unsigned char *src = (unsigned char *)rgba, *dst = [rep bitmapData];
+    for (int i = 0; i < width*height; i++) { dst[i*3]=src[i*4]; dst[i*3+1]=src[i*4+1]; dst[i*3+2]=src[i*4+2]; }
+    free(rgba);
+    NSImage *imag = [[NSImage alloc] init];
+    [imag addRepresentation:rep];
+    NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
+    [pasteboard clearContents];
+    [pasteboard writeObjects:[NSArray arrayWithObject:imag]];
+#else
+    // iOS/iPadOS: build a CGImage from the RGB readback and put a UIImage on the
+    // system pasteboard. (CoreGraphics is shared; pasteboard/UIImage are UIKit.)
+    unsigned char *rgb = (unsigned char *)malloc((size_t)width*height*3);
+    if (!rgb) { free(rgba); return; }
+    unsigned char *src = (unsigned char *)rgba;
+    for (int i = 0; i < width*height; i++) { rgb[i*3]=src[i*4]; rgb[i*3+1]=src[i*4+1]; rgb[i*3+2]=src[i*4+2]; }
+    free(rgba);
+    CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
+    CGContextRef ctx = CGBitmapContextCreate(rgb, width, height, 8, 3*width, cs, kCGImageAlphaNone);
+    CGImageRef cg = ctx ? CGBitmapContextCreateImage(ctx) : NULL;
+    if (cg) {
+        UIImage *imag = [UIImage imageWithCGImage:cg];
+        [UIPasteboard generalPasteboard].image = imag;
+        CGImageRelease(cg);
+    }
+    if (ctx) CGContextRelease(ctx);
+    CGColorSpaceRelease(cs);
+    free(rgb);
+#endif
+}
 
 -(void) makeMosaic:(NSString *)mosStr
 {
-   //next two lines of code ensure text string is generated, only required if main image does not have labels
-    [glStringTex setString:@"" withAttributes:stanStringAttrib];
-    [glStringTex drawRightOfPoint:NSMakePoint (8, 8)];
     //NSString *str = @"V 0.5 H 0.5 0.5 S 0.3; C 0.1 0.7";
     mosaicObj *mos = [[mosaicObj alloc] init];
     [mos str2Mosaic:mosStr];
@@ -2875,179 +2473,211 @@ double  defuzzz(double x) {
     int height = mos->TotalSizeInPixels.y;
     //NSLog(@"%d x %d", width, height);
     if((width <1) || (height <1)) return;
-    prefs->scrnWid = width;
-    prefs->scrnHt = height;
-    //NSRect mosaicPixels = [self computeMosaic:str reDraw: false sliceFrac: true];
-    //int width = mosaicPixels.size.width;
-    //int height = mosaicPixels.size.height;
-    //build OpenGL context
-    //http://lists.apple.com/archives/mac-opengl/2010/Mar/msg00077.html
-    //NSOpenGLPFARemotePixelBuffer, //<-deprecated
-    //NSOpenGLPFAOpenGLProfile, (NSOpenGLPixelFormatAttribute)NSOpenGLProfileVersionLegacy,
-    //NSOpenGLPFAOpenGLProfile, (NSOpenGLPixelFormatAttribute)NSOpenGLProfileVersion3_2Core,
-    NSOpenGLPixelFormatAttribute attributes[] =
-    {
-        NSOpenGLPFAOpenGLProfile, (NSOpenGLPixelFormatAttribute)NSOpenGLProfileVersionLegacy,
-        NSOpenGLPFAAllowOfflineRenderers,
-        NSOpenGLPFANoRecovery,
-        NSOpenGLPFAAccelerated,
-        NSOpenGLPFAColorSize, 24,
-        (NSOpenGLPixelFormatAttribute) 0
-    };
-    // NSOpenGLPixelFormatAttribute
-    id pf = [[NSOpenGLPixelFormat alloc] initWithAttributes:attributes];
-    id ctx = [[NSOpenGLContext alloc] initWithFormat:pf shareContext:nil];
-    [ctx makeCurrentContext];
-    GLuint renderbuffer;
-    glGenRenderbuffersEXT(1, &renderbuffer);
-    glBindRenderbufferEXT(GL_RENDERBUFFER_EXT, renderbuffer);
-    glRenderbufferStorageEXT(GL_RENDERBUFFER_EXT, GL_RGBA8, width, height);
-    GLuint tex;
-    glGenTextures(1, &tex);
-    glBindTexture(GL_TEXTURE_RECTANGLE_ARB, tex);
-    glTexImage2D(GL_TEXTURE_RECTANGLE_ARB, 0, GL_RGBA, width, height,
-                 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-    GLuint fbo_tex;
-    glGenFramebuffersEXT(1, &fbo_tex);
-    glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, fbo_tex);
-    glFramebufferTexture2DEXT(GL_FRAMEBUFFER_EXT,
-                              GL_COLOR_ATTACHMENT0_EXT, GL_TEXTURE_RECTANGLE_ARB, tex, 0);
-    if (glCheckFramebufferStatusEXT(GL_FRAMEBUFFER_EXT) !=
-        GL_FRAMEBUFFER_COMPLETE_EXT) {
-        printf("glCheckFramebufferStatusEXT failed for tex\n");
-        exit(1);
-    }
-    GLuint fb;
-    glGenFramebuffersEXT(1, &fb);
-    glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, fb);
-    glFramebufferRenderbufferEXT(GL_FRAMEBUFFER_EXT,
-                                 GL_COLOR_ATTACHMENT0_EXT, GL_RENDERBUFFER_EXT, renderbuffer);
-    if (glCheckFramebufferStatusEXT(GL_FRAMEBUFFER_EXT) !=
-        GL_FRAMEBUFFER_COMPLETE_EXT) {
-        printf("glCheckFramebufferStatusEXT failed for renderbuffer\n");
-        exit(1);
-    }
-    //we will create 3D volumes specific for this context...
-    GLuint intensityOverlay3D = prefs->intensityOverlay3D;
-    GLuint gradientOverlay3D = prefs->gradientOverlay3D;
-    GLuint intensityTexture3D = prefs->intensityTexture3D;
-    GLuint gradientTexture3D = prefs->gradientTexture3D;
-    prefs->intensityOverlay3D = 0;
-    prefs->gradientOverlay3D = 0;
-    prefs->intensityTexture3D = 0;
-    prefs->gradientTexture3D = 0;
-
-
-    //create the mosaic
-    [self mosaicPrepGL:  width Height:height];
-    [self redrawMosaic: mos];
-    NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes: NULL
-                                                                    pixelsWide: width pixelsHigh: height bitsPerSample: 8 samplesPerPixel: 3 hasAlpha: NO
-                                                                      isPlanar: NO colorSpaceName: NSCalibratedRGBColorSpace bytesPerRow: 3*width bitsPerPixel: 0];
-    // The following block does the actual reading of the image
-    glPushAttrib(GL_PIXEL_MODE_BIT); // Save state about reading buffers
-    glReadBuffer(GL_FRONT);
-    glPixelStorei(GL_PACK_ALIGNMENT, 1); // Dense packing
-    glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, [rep bitmapData]);
-    glPopAttrib();
-    //next: use core image to flip the image so it is rightside up
-    CIImage* ciimag = [[CIImage alloc] initWithBitmapImageRep: rep];
-    CGAffineTransform trans = CGAffineTransformIdentity;
-    trans = CGAffineTransformMakeTranslation(0.0f, height);
-    trans = CGAffineTransformScale(trans, 1.0, -1.0);
-    ciimag = [ciimag imageByApplyingTransform:trans];
-    rep = [[NSBitmapImageRep alloc] initWithCIImage: ciimag];//get data back from core image
-    //save to clipboard
-    NSImage *imag = [[NSImage alloc] init] ;
-    [imag addRepresentation:rep];
-    NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
-    [pasteboard clearContents];
-    NSArray *copiedObjects = [NSArray arrayWithObject:imag];
-    [pasteboard writeObjects:copiedObjects];
-    //release textures and frame buffer
-    if (prefs->intensityOverlay3D != 0) glDeleteTextures(1,&prefs->intensityOverlay3D);
-    if (prefs->gradientOverlay3D != 0) glDeleteTextures(1,&prefs->gradientOverlay3D);
-    if (prefs->intensityTexture3D != 0) glDeleteTextures(1,&prefs->intensityTexture3D);
-    if (prefs->gradientTexture3D != 0) glDeleteTextures(1,&prefs->gradientTexture3D);
-    glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0); //Bind 0, which means render to back buffer, as a result, fb is unbound
-    glDeleteFramebuffersEXT(1, &fb); //cleanup https://www.opengl.org/wiki/Framebuffer_Object_Examples
-    //return handles for screen textures
-    prefs->intensityOverlay3D = intensityOverlay3D;
-    prefs->gradientOverlay3D = gradientOverlay3D;
-    prefs->intensityTexture3D = intensityTexture3D;
-    prefs->gradientTexture3D = gradientTexture3D;
-    //set openGL for correct canvas - not needed as we have set glslUpdateGradientsOverlay/glslUpdateGradientsBG to false
-    //prefs->force_refreshGL = true;
-    //prefs->force_recalcGL = true;
+    [self makeMosaicMetal:mos width:width height:height];
+    return;
 } //makeMosaic
 
-- (bool) doRedraw {
-    GLenum stat = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-    if (stat != GL_FRAMEBUFFER_COMPLETE) return false;
-    if (! prefs->force_refreshGL) return false;
-    if (prefs->busyGL) return false;
-    if ((prefs->scrnHt < 1) || (prefs->scrnWid < 1)) return false;
-    glClearColor(prefs->backColor[0],prefs->backColor[1],prefs->backColor[2], 0.0);
-    glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
-    
+// Per-frame redraw: run recalcGL's CPU data-prep (LUT / RGBA build), which feeds
+// the volume to the per-window renderer via the recalcSub* upload hooks, then
+// render the full 2D+3D frame with Metal.
+- (void) redrawMetalInView:(MTKView *)view {
+    if ((prefs->scrnHt < 1) || (prefs->scrnWid < 1)) return;
+    if (prefs->busyGL) return;
     prefs->busyGL = true;
-    GLenum error = glGetError();
-    if (error) NSLog(@"doRedraw init error %d\n", error);
-    if (prefs->force_recalcGL) {
-        //clock_t start = clock();
-        prefs->force_recalcGL = false;
-        #ifdef NII_IMG_RENDER
-        createRender(prefs);
-        #endif
-        error = glGetError();
-        if (error) NSLog(@"createRender exit error %d\n", error);
-        recalcGL(fslio, prefs);
-        error = glGetError();
-        if (error) NSLog(@"recalcGL exit error %d\n", error);
-        scrnSize(prefs); //666 <- redundant???
-        #ifdef NII_IMG_RENDER
-        recalcRender (prefs);
-        #endif
-        error = glGetError();
-        if (error) NSLog(@"recalcRender exit error %d\n", error);
-        //printf("recalcGL required %fms\n", ((double)(clock()-start))/1000);
+    if (!_metalRenderer && view.device) {
+        _metalRenderer = [NIIMetalRenderer offscreenRendererWithDevice:view.device libraryURL:nil];
+        [(NIIMetalRenderer *)_metalRenderer loadMatcapFromBundle];
     }
-    //glClearColor(1.0, 0.0, 0.0,1.0);
-    error = glGetError();
-    if (error) NSLog(@"clear enter error %d\n", error);
-    //glUseProgram(0);
-    //glBindFramebufferEXT(GL_FRAMEBUFFER_EXT,0);
-    error = glGetError();
-    if (error) NSLog(@"bind enter error %d\n", error);
-    glClearColor(prefs->backColor[0],prefs->backColor[1],prefs->backColor[2],1.0);
-    error = glGetError();
-    if (error) NSLog(@"clearcolor  error %d\n", error);
-    //glClear(GL_COLOR_BUFFER_BIT); //generates an error!
-    error = glGetError();
-    if (error) NSLog(@"clear exit error %d\n", error);
-    #ifdef NII_IMG_RENDER
-        //if ((prefs->displayModeGL == GL_2D_ONLY) || (prefs->displayModeGL == GL_2D_AXIAL)
-        //    || (prefs->displayModeGL == GL_2D_CORONAL)  || (prefs->displayModeGL == GL_2D_SAGITTAL) )
-        if (self.is2D)
-            [self redraw2D]; //only draw 2D sections
-        else {
-            error = glGetError();
-            if (error) NSLog(@"redrawRender enter error %d\n", error);
-            redrawRender(prefs); //draw 3D rendering
-            error = glGetError();
-            if (error) NSLog(@"redrawRender exit error %d\n", error);
-            if (prefs->displayModeGL == GL_2D_AND_3D) [self redraw2D]; //also draw 2D sections
-        }
-    #else
-        [self redraw2D]; //if compiling without rendering: only draw 2D sections
-    #endif
-    GLenum err = glGetError();
-    if (GL_NO_ERROR != err)   printf("nii_img glGetError = 0x%x\n", err);
-    glFinish();
-    //glFlush();     // Flush all OpenGL calls - we will have the NSOpenGLView do this
+    NIIMetalRenderer *r = (NIIMetalRenderer *)_metalRenderer;
+    gCurrentRenderer = r; // recalc upload hooks feed THIS window's renderer
+    if (prefs->force_recalcGL) {
+        prefs->force_recalcGL = false;
+        recalcGL(fslio, prefs);
+        scrnSize(prefs);
+        #ifdef NII_IMG_RENDER
+        recalcRender(prefs);
+        #endif
+    }
+    if (r && [r beginFrameInView:view prefs:prefs]) {
+        if (!self.is2D)
+            [r drawOrientCubeForPrefs:prefs]; // 3D orientation indicator
+        if (self.is2D || (prefs->displayModeGL == GL_2D_AND_3D))
+            [self drawMetalOverlays:r];
+        [r endFrameInView:view];
+    }
     prefs->force_refreshGL = false;
     prefs->busyGL = false;
-    return true;
+}
+
+- (BOOL) metalScreenshotIntoRGB:(unsigned char *)dest width:(int)w height:(int)h {
+    NIIMetalRenderer *r = (NIIMetalRenderer *)_metalRenderer;
+    if (!r || w < 1 || h < 1) return NO;
+    // Offscreen frame WITH overlays (orientation cube + 2D overlays), matching
+    // the on-screen composition.
+    if (![r beginOffscreenFrameWidth:w height:h prefs:prefs]) return NO;
+    if (!self.is2D)
+        [r drawOrientCubeForPrefs:prefs];
+    if (self.is2D || (prefs->displayModeGL == GL_2D_AND_3D))
+        [self drawMetalOverlays:r];
+    void *rgba = [r endOffscreenReadback];
+    if (!rgba) return NO;
+    unsigned char *src = (unsigned char *)rgba;
+    for (int i = 0; i < w*h; i++) { dest[i*3] = src[i*4]; dest[i*3+1] = src[i*4+1]; dest[i*3+2] = src[i*4+2]; }
+    free(rgba);
+    return YES;
+}
+
+// 2D overlays for the Metal frame (port of redraw2D's overlay section). Uses
+// NIIMetalText (cross-platform GLString replacement). Drawn between begin/end.
+- (void)drawMetalOverlays:(NIIMetalRenderer *)r {
+    id<MTLDevice> dev = r.device; // reuse the renderer's device (no per-draw device creation)
+    // Text is rasterized in drawable (backing) pixels; scale point sizes by the
+    // backing factor so they aren't tiny on Retina (plus a bump for readability).
+    CGFloat fs = niiBackingScale();
+    CGFloat fLabel = 18 * fs, fOrient = 24 * fs, fBar = 15 * fs;
+    // Contrast the label with the background (white text is invisible on white).
+    float bgLum = (prefs->backColor[0] + prefs->backColor[1] + prefs->backColor[2]) / 3.0f;
+    simd_float4 white = (bgLum > 0.5f) ? (simd_float4){0, 0, 0, 1} : (simd_float4){1, 1, 1, 1};
+    if (prefs->showInfo) {
+        NSString *intensityStr = [self getIntensityStr];
+        NSString *s;
+        if (prefs->numVolumes < 2)
+            s = [NSString stringWithFormat:@"%g×%g×%g=%@", defuzzz(prefs->mm[1]), defuzzz(prefs->mm[2]), defuzzz(prefs->mm[3]), intensityStr];
+        else
+            s = [NSString stringWithFormat:@"%g×%g×%g=%@ %d/%d", defuzzz(prefs->mm[1]), defuzzz(prefs->mm[2]), defuzzz(prefs->mm[3]), intensityStr, prefs->currentVolume, prefs->numVolumes];
+        NIIMetalText *t = [[NIIMetalText alloc] initWithString:s pointSize:fLabel device:dev];
+        if (t.texture) // drawAboveLeftOfPoint(scrnWid-8, 4): bottom-right near the point
+            [r drawGlyphTexture:t.texture width:t.pixelWidth height:t.pixelHeight
+                            atX:(prefs->scrnWid - 8 - t.pixelWidth) y:4 tint:white];
+    }
+    // Orientation labels (port of drawOrientLabelTex). drawRightOfPoint -> left
+    // edge at px, vertically centered; drawBelowPoint -> centered, top at py.
+    if (prefs->showOrient && prefs->scrnDim[1] >= 16 && fslio
+        && fslio->niftiptr->sform_code != NIFTI_XFORM_UNKNOWN) {
+        int d1 = prefs->scrnDim[1], d2 = prefs->scrnDim[2], d3 = prefs->scrnDim[3];
+        NSString *lr = prefs->viewRadiological ? @"R" : @"L";
+        void (^right)(NSString*,float,float) = ^(NSString *str, float px, float py){
+            NIIMetalText *t = [[NIIMetalText alloc] initWithString:str pointSize:fOrient device:dev];
+            if (t.texture) [r drawGlyphTexture:t.texture width:t.pixelWidth height:t.pixelHeight
+                                           atX:px y:(py - t.pixelHeight/2.0f) tint:white];
+        };
+        void (^below)(NSString*,float,float) = ^(NSString *str, float px, float py){
+            NIIMetalText *t = [[NIIMetalText alloc] initWithString:str pointSize:fOrient device:dev];
+            if (t.texture) [r drawGlyphTexture:t.texture width:t.pixelWidth height:t.pixelHeight
+                                           atX:(px - t.pixelWidth/2.0f) y:(py - t.pixelHeight) tint:white];
+        };
+        if (prefs->displayModeGL == GL_2D_AXIAL)      { right(lr, 8, d2/2.0f); }
+        else if (prefs->displayModeGL == GL_2D_CORONAL) { right(lr, 8, d3/2.0f); }
+        else if (prefs->displayModeGL == GL_2D_SAGITTAL) { /* none */ }
+        else { // 2x2 / 3-up
+            if (d2 > 16) right(lr, 8, d2/2.0f);                          // L/R on axial
+            if (!prefs->scrnWideLayout && d3 > 16) right(lr, 8, d2 + d3/2.0f); // L/R on coronal
+            if (d3 > 16) below(@"A", d1/2.0f, d2);                       // A on axial
+            if (prefs->scrnWideLayout) {
+                if (d3 > 16) right(lr, 8 + d1, d3/2.0f);
+                if (d3 > 16) below(@"S", d1 + d1/2.0f, d3);
+            } else if (d3 > 16) {
+                below(@"S", d1/2.0f, d2 + d3);
+            }
+        }
+    }
+    // DTI vectors (port of drawVectors): 3 line segments, one per plane.
+    if (prefs->numDtiV >= prefs->currentVolume && prefs->currentVolume >= 1) {
+        float d1 = prefs->scrnDim[1], d2 = prefs->scrnDim[2], d3 = prefs->scrnDim[3];
+        float mn = MIN(MIN(d1, d2), d3) / 2.0f;
+        float vx = prefs->dtiV[prefs->currentVolume-1][0] * mn * (prefs->viewRadiological ? -1 : 1);
+        float vy = prefs->dtiV[prefs->currentVolume-1][1] * mn;
+        float vz = prefs->dtiV[prefs->currentVolume-1][2] * mn;
+        float cx = d1/2, ax = d1/2, sx = d1 + d2/2;
+        float coY = d2 + d3/2, axY = d2/2, saY = d2 + d3/2;
+        float seg[12] = {
+            cx + vx, coY + vz,  cx, coY,   // coronal
+            ax + vx, axY + vy,  ax, axY,   // axial
+            sx + vy, saY + vz,  sx, saY,   // sagittal
+        };
+        [r drawLines:seg count:6 color:(simd_float4){0.9f, 0.9f, 0.1f, 0.9f} width:5.0f]; // GL glLineWidth(5)
+    }
+    // Colorbar: gradient + numeric tick labels (port of drawColorBarTex). Gated like the GL path.
+    if (prefs->showInfo && fslio && fslio->niftiptr->intent_code != NIFTI_INTENT_LABEL) {
+        float L = prefs->colorBarPos[0]*prefs->scrnWid, B = prefs->colorBarPos[1]*prefs->scrnHt;
+        float Rr = prefs->colorBarPos[2]*prefs->scrnWid, Tt = prefs->colorBarPos[3]*prefs->scrnHt;
+        if (L > Rr) { float t=L; L=Rr; Rr=t; }
+        if (B > Tt) { float t=B; B=Tt; Tt=t; }
+        float lW = Rr-L, lH = Tt-B;
+        if (lW > 2 && lH > 2) {
+            const int N = 255;
+            float *cv = (float *)malloc((size_t)N*6*7*sizeof(float));
+            if (!cv) return;
+            int p = 0;
+            for (int i = 0; i < N; i++) {
+                uint32_t clr = prefs->lut[i+1];
+                float rr=(clr&0xff)/255.0f, gg=((clr>>8)&0xff)/255.0f, bb=((clr>>16)&0xff)/255.0f;
+                float x0,y0,x1,y1;
+                if (lH >= lW) { x0=L; x1=Rr; y0=B+lH*i/N; y1=B+lH*(i+1)/N; }
+                else          { y0=B; y1=Tt; x0=L+lW*i/N; x1=L+lW*(i+1)/N; }
+                float qx[6]={x0,x1,x1,x0,x1,x0}, qy[6]={y0,y0,y1,y0,y1,y1};
+                for (int k=0;k<6;k++){ cv[p++]=qx[k]; cv[p++]=qy[k]; cv[p++]=0; cv[p++]=rr; cv[p++]=gg; cv[p++]=bb; cv[p++]=1; }
+            }
+            [r drawColoredVerts:cv count:N*6];
+            free(cv);
+            // Numeric tick labels along the bar (min..max), with a short tick mark.
+            BOOL vertical = (lH >= lW);
+            const float fracs[5] = {0.0f, 0.25f, 0.5f, 0.75f, 1.0f};
+            for (int ti = 0; ti < 5; ti++) {
+                float fr = fracs[ti];
+                double val = prefs->viewMin + (prefs->viewMax - prefs->viewMin) * fr;
+                NIIMetalText *lbl = [[NIIMetalText alloc] initWithString:[NSString stringWithFormat:@"%g", val]
+                                                              pointSize:fBar device:dev];
+                if (!lbl.texture) continue;
+                float tx, ty;
+                if (vertical) {
+                    float y = B + lH * fr;
+                    tx = L - lbl.pixelWidth - 6;
+                    ty = y - lbl.pixelHeight * fr; // fr=0 bottom-aligned, fr=1 top-aligned
+                    float tick[4] = { L - 5, y, L, y };
+                    [r drawLines:tick count:2 color:white width:1.5f];
+                } else {
+                    float x = L + lW * fr;
+                    tx = x - lbl.pixelWidth * fr;  // fr=0 left-aligned, fr=1 right-aligned
+                    ty = B - lbl.pixelHeight - 6;
+                    float tick[4] = { x, B - 5, x, B };
+                    [r drawLines:tick count:2 color:white width:1.5f];
+                }
+                [r drawGlyphTexture:lbl.texture width:lbl.pixelWidth height:lbl.pixelHeight atX:tx y:ty tint:white];
+            }
+        }
+    }
+    // Histogram (port of drawHistogram) — 2D-only mode, in the empty quadrant.
+    if (self.is2D && prefs->showInfo) {
+        const int kB = 32;
+        int Lft = prefs->scrnDim[1], Wid = prefs->scrnDim[2], Ht = prefs->scrnDim[2];
+        int WidB = Wid - 2*kB, HtB = Ht - 2*kB;
+        float ymax = 0;
+        for (int i = 0; i < MAX_HISTO_BINS; i++) if (prefs->histo[i] > ymax) ymax = prefs->histo[i];
+        if (WidB >= 4 && HtB >= 4 && ymax > 0) {
+            ymax = logf(ymax);
+            float cr=prefs->colorBarBorderColor[0], cg=prefs->colorBarBorderColor[1], cbb=prefs->colorBarBorderColor[2];
+            const int N = MAX_HISTO_BINS;
+            float *hv = (float *)malloc((size_t)(N-1)*6*7*sizeof(float)); if (!hv) return; int p = 0;
+            for (int i = 0; i < N-1; i++) {
+                float x0 = Lft+kB + (float)i/N*WidB, x1 = Lft+kB + (float)(i+1)/N*WidB;
+                float y0 = prefs->histo[i]   > 0 ? logf(fabsf(prefs->histo[i]))  /ymax*HtB : 0; if (y0<1) y0=1;
+                float y1 = prefs->histo[i+1] > 0 ? logf(fabsf(prefs->histo[i+1]))/ymax*HtB : 0; if (y1<1) y1=1;
+                float b = kB;
+                float qx[6]={x0,x0,x1,x0,x1,x1}, qy[6]={b,y0+b,y1+b,b,y1+b,b};
+                for (int k=0;k<6;k++){ hv[p++]=qx[k]; hv[p++]=qy[k]; hv[p++]=0; hv[p++]=cr; hv[p++]=cg; hv[p++]=cbb; hv[p++]=0.9f; }
+            }
+            [r drawColoredVerts:hv count:(N-1)*6];
+            free(hv);
+        }
+    }
+}
+
+// doRedraw was the OpenGL redraw entry point. Under Metal the view drives
+// rendering through redrawMetalInView: (MTKView delegate), so this is now a
+// no-op kept only to satisfy the declaration / any stray callers.
+- (bool) doRedraw {
+    return false;
 }
 
 
@@ -3579,6 +3209,7 @@ void closeOverlays (NII_PREFS* prefs)
 {
     bool result = (!access([file_name UTF8String], R_OK) );
     if (result) return result; //already have access
+#if TARGET_OS_OSX
     NSOpenPanel *openPanel  = [NSOpenPanel openPanel];
     [openPanel setDirectoryURL: [[NSURL alloc] initWithString:file_name]];
     //NSLog(@"selecting : %@",[FName lastPathComponent] ); // [FName lastPathComponent]
@@ -3589,15 +3220,15 @@ void closeOverlays (NII_PREFS* prefs)
     [openPanel runModal];
     result = (!access([file_name UTF8String], R_OK) );
     if (result) return result; //already have access
-    /*
-    NSAlert *alert = [[NSAlert alloc] init];
-    [alert setMessageText:[@"You do not have access to the file " stringByAppendingString:[file_name lastPathComponent]] ];
-    [alert runModal];*/
     NSBeginAlertSheet(@"Unable to open image", @"OK",NULL,NULL, [[NSApplication sharedApplication] keyWindow], self,
                       NULL, NULL, NULL,
                       @"%@"
                       , [@"You do not have access to the file " stringByAppendingString:[file_name lastPathComponent]]);
-     return result; //no access*/
+#endif
+    // iOS/iPadOS grants access via security-scoped URLs from UIDocumentPicker
+    // (handled by the UIKit file-import layer in Phase 4), so there is no
+    // AppKit open-panel fallback here.
+    return result; //no access
 }
 
 -(BOOL) checkSandAccess2: (NSString *)file_name
@@ -3651,14 +3282,16 @@ void closeOverlays (NII_PREFS* prefs)
     fclose( header_file ) ;
 }
 
-- (IBAction)notifyImageTooBig
+- (void)notifyImageTooBig
 {
+#if TARGET_OS_OSX
     NSUserNotification *notification = [[NSUserNotification alloc] init];
     notification.title = [NSString stringWithFormat:@"Image too large for volume rendering"];
     notification.informativeText = @"Display may be impaired";
     notification.soundName = NULL;
     [[NSUserNotificationCenter defaultUserNotificationCenter] deliverNotification:notification];
     [NSTimer scheduledTimerWithTimeInterval: 4.5  target:self selector: @selector(closePopup) userInfo:self repeats:NO];
+#endif
 }
 
 -(int)  setLoadImage2: (NSString *) file_name IsOverlay: (bool) isOverlay;
@@ -3842,6 +3475,39 @@ void closeOverlays (NII_PREFS* prefs)
     return prefs;
 }
 
+-(NSString *) getHeaderInfo;
+{
+    if (!fslio || !fslio->niftiptr) return @"";
+    nifti_image *n = fslio->niftiptr;
+    // NIfTI datatype code -> readable name
+    const char *dt;
+    switch (n->datatype) {
+        case 2:   dt = "uint8";   break;
+        case 4:   dt = "int16";   break;
+        case 8:   dt = "int32";   break;
+        case 16:  dt = "float32"; break;
+        case 64:  dt = "float64"; break;
+        case 256: dt = "int8";    break;
+        case 512: dt = "uint16";  break;
+        case 768: dt = "uint32";  break;
+        default:  dt = "?";       break;
+    }
+    NSMutableString *s = [NSMutableString string];
+    [s appendFormat:@"Dimensions: %d × %d × %d", n->nx, n->ny, n->nz];
+    if (prefs->numVolumes > 1) [s appendFormat:@" × %d volumes", prefs->numVolumes];
+    [s appendFormat:@"\nVoxel size: %g × %g × %g mm", defuzzz(n->dx), defuzzz(n->dy), defuzzz(n->dz)];
+    if (prefs->numVolumes > 1 && n->pixdim[4] > 0) [s appendFormat:@"\nTR: %g s", defuzzz(n->pixdim[4])];
+    [s appendFormat:@"\nData type: %s (%d bytes/voxel)", dt, n->nbyper];
+    double mn = 0, mx = 0; [self getViewMinMax:&mn Max:&mx];
+    [s appendFormat:@"\nDisplay range: %g … %g", defuzzz(mn), defuzzz(mx)];
+    BOOL spatial = (n->sform_code != NIFTI_XFORM_UNKNOWN) || (n->qform_code != NIFTI_XFORM_UNKNOWN);
+    [s appendFormat:@"\nSpatial transform: %@", spatial ? @"yes (oriented)" : @"none"];
+    if (n->isDICOM) [s appendString:@"\nSource: DICOM"];
+    if (n->descrip[0] != '\0')
+        [s appendFormat:@"\nDescription: %s", n->descrip];
+    return s;
+}
+
 - (id)init
 {
     self = [super init];
@@ -3878,11 +3544,6 @@ void closeOverlays (NII_PREFS* prefs)
         //x prefs->colorBarBorder = 0.002; // 1/2%
         prefs->busyGL = FALSE; //prepared for drawing
         prefs->updatedTimeline = FALSE;
-        prefs->intensityTexture3D = 0;
-        prefs->gradientTexture3D = 0;
-        prefs->intensityOverlay3D = 0;
-        prefs->gradientOverlay3D = 0;
-        prefs->matcap2D = 0;
         prefs->numDtiV = 0;
         prefs->orthoOrient = true;
         prefs->advancedRender = false;
@@ -3895,31 +3556,21 @@ void closeOverlays (NII_PREFS* prefs)
         initTRayCast(prefs);
         #endif
         labelArray = [[NSMutableArray alloc]init];
-        NSFont * font =[NSFont fontWithName:@"Helvetica" size:16.0];
-        stanStringAttrib = [NSMutableDictionary dictionary];
-        [stanStringAttrib setObject:font forKey:NSFontAttributeName];
-        [stanStringAttrib setObject:[NSColor whiteColor] forKey:NSForegroundColorAttributeName];
-        NSString * string = [NSString stringWithFormat:@""];
-        //aloc
-        //NSLog(@"nii_img FontCreate");
-        glStringTex = [[GLString alloc] initWithString:string withAttributes:stanStringAttrib withTextColor:[NSColor colorWithDeviceRed:0.7f green:0.7f blue:0.7f alpha:1.0f] withBoxColor:[NSColor colorWithDeviceRed:0.5f green:0.5f blue:0.5f alpha:0.5f] withBorderColor:[NSColor colorWithDeviceRed:0.5f green:0.7f blue:0.5f alpha:0.0f]];
+        // (text is now rasterized by NIIMetalText; the GLString glyph cache + its
+        //  NSFont/NSColor attribute dictionary are gone)
     }
     return self;
 }
 
-- (void) updateFont: (NSColor *) aColor {
-    //[glStringTex setScale: 1];
-    [stanStringAttrib setObject:aColor forKey:NSForegroundColorAttributeName];
-    //float y = 0.299 * aColor.redComponent + 0.587 * aColor.greenComponent + 0.114 * aColor.blueComponent;
-    float y = (aColor.redComponent + aColor.greenComponent + aColor.blueComponent)*0.3333;
-    if (y > 0.3)
-        [glStringTex setBoxColor: [NSColor colorWithDeviceRed:0.0f green:0.0f blue:0.0f alpha:0.9f]]; //use black background for dark text
-    else
-        [glStringTex setBoxColor: [NSColor colorWithDeviceRed:1.0f green:1.0f blue:1.0f alpha:0.9f]]; //use white background for dark text
+- (void) updateFont: (PlatformColor *) aColor {
+    // Metal text (NIIMetalText) picks its tint from the background at draw time
+    // in drawMetalOverlays, so there's nothing to cache here now.
+    (void)aColor;
 }
 
 - (void) updateFontScale: (float) scale {
-    [glStringTex setScale: scale];
+    // GLString scale is obsolete — NIIMetalText sizes glyphs per Retina backing.
+    (void)scale;
 }
 
 
@@ -3927,16 +3578,8 @@ void closeOverlays (NII_PREFS* prefs)
 - (void)dealloc
 {
     [self closeAllOverlays];
-    if (prefs->intensityTexture3D != 0) glDeleteTextures(1,&prefs->intensityTexture3D); //release texture memory
-    if (prefs->gradientTexture3D != 0) glDeleteTextures(1,&prefs->gradientTexture3D); //release texture memory
-    if (prefs->intensityOverlay3D != 0) glDeleteTextures(1,&prefs->intensityOverlay3D); //release texture memory
-    if (prefs->gradientOverlay3D != 0) glDeleteTextures(1,&prefs->gradientOverlay3D); //release texture memory
-    //if (prefs->glslprogram != NULL) glDeleteObjectARB(prefs->glslprogram); //release GLSL rendering program
-    glDeleteProgram(prefs->glslprogramMR);
-    glDeleteProgram(prefs->glslprogramCT);
-    glDeleteProgram(prefs->glslprogramIntSobel);
-    glDeleteProgram(prefs->glslprogramIntBlur);
-    //free(prefs);
+    // GPU resources (3D textures, shader programs) are now owned and released by
+    // the per-window NIIMetalRenderer (_metalRenderer); no GL handles to free here.
     [self freePrefs];
     FslClose(fslio);
     #if !__has_feature(objc_arc)

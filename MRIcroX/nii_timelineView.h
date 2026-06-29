@@ -7,6 +7,7 @@
 //
 
 #import <Cocoa/Cocoa.h>
+#include "nii_graph.h" // GraphStruct (platform-neutral; shared with the iOS target)
 
 @interface nii_timelineView : NSImageView
 /*{
@@ -14,13 +15,6 @@
     //NSImage *myimage;
     NSImageView *myview;
 }*/
-
-typedef struct   {
-    int timepoints, lines, selectedTimepoint;
-    float verticalScale;
-    bool blackBackground, enabled;
-    float * data;
-} GraphStruct;
 
 - (void)savePDFFromFileName:(NSString *)fname;
 - (void)savePDF;

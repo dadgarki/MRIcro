@@ -3149,9 +3149,19 @@ int pigz_File(char * fname, struct TDCMopts opts, size_t imgsz) {
         } else
             printMessage("Compression failed %s\n",command);
     #else //if win else linux
+    #if defined(__APPLE__)
+        #include <TargetConditionals.h>
+    #endif
+    #if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
+    // iOS/iPadOS sandboxes forbid spawning external processes; the external
+    // pigz/gzip compressor is unavailable. Output gzip uses the internal
+    // miniz/zlib path instead.
+    printWarning("External compression unavailable on this platform: %s\n",command);
+    #else
     int ret = system(command);
     if (ret == -1)
         printWarning("Failed to execute: %s\n",command);
+    #endif
     #endif //else linux
     printMessage("Compress: %s\n",command);
     return EXIT_SUCCESS;
@@ -7427,10 +7437,11 @@ void readIniFile (struct TDCMopts *opts, const char * argv[]) {
     sprintf(opts->optsname, "%s%s", getenv("HOME"), STATUSFILENAME);
     FILE *fp = fopen(opts->optsname, "r");
     if (fp == NULL) return;
-    char Setting[20],Value[255];
-    //while ( fscanf(fp, "%[^=]=%s\n", Setting, Value) == 2 ) {
-    //while ( fscanf(fp, "%[^=]=%s\n", Setting, Value) == 2 ) {
-    while ( fscanf(fp, "%[^=]=%[^\n]\n", Setting, Value) == 2 ) {
+    char Setting[64],Value[255];
+    // Width limits are REQUIRED: without them a long key/value overflows these
+    // stack buffers (e.g. "isMaximize16BitRange" is 20 chars and overflowed the
+    // former Setting[20]), tripping __stack_chk_fail at launch.
+    while ( fscanf(fp, "%63[^=]=%254[^\n]\n", Setting, Value) == 2 ) {
         //printMessage(">%s<->'%s'\n",Setting,Value);
         if ( strcmp(Setting,"isGZ") == 0 )
             opts->isGz = atoi(Value);

@@ -19,14 +19,11 @@ extern "C" {
 #define MY_USE_ADVANCED_GLSL //<- if not set, only basic rendering
 //#define MY_SHOW_GRADIENTS //shows angle calculations, requires MY_USE_ADVANCED_GLSL
 #define MY_USE_GLSL_FOR_GRADIENTS
+    // CPU-only helpers retained after the OpenGL→Metal migration. The former GL
+    // entry points (createRender/redrawRender/initShaderWithFile/doShaderBlurSobel/
+    // bindSubGL) were removed — rendering is now done by NIIMetalRenderer.
     void initTRayCast (NII_PREFS* prefs);
-    //void initShaderWithFile ( GLhandleARB* glslprogram);
-    void  createRender (NII_PREFS* prefs);
-    void redrawRender (NII_PREFS* prefs) ;
     void recalcRender(NII_PREFS* prefs) ;
-    void initShaderWithFile (NII_PREFS* prefs);
-    void doShaderBlurSobel (NII_PREFS* prefs);
-    GLuint bindSubGL(NII_PREFS* prefs, uint32_t *data, GLuint oldHandle);
 #ifdef  __cplusplus
 }
 #endif
