@@ -35,6 +35,30 @@
 static const float kDefaultDistance = 2.25f;
 static const float kMaxDistance     = 40.0f;
 
+// Bundle that holds this renderer's resources (Shaders.metal -> default.metallib,
+// 00ShinyWhite.jpg). When built as a Swift package the resources live in the
+// module's generated resource bundle (SWIFTPM_MODULE_BUNDLE); in the app targets
+// they are in the main bundle.
+static NSBundle *niiResourceBundle(void) {
+#if defined(NII_SWIFTPM) && defined(SWIFTPM_MODULE_BUNDLE)
+    return SWIFTPM_MODULE_BUNDLE;
+#else
+    return [NSBundle mainBundle];
+#endif
+}
+
+// Load the shader library: under SwiftPM, default.metallib sits in the module
+// bundle (newDefaultLibrary only looks in the main bundle), so load it by URL
+// there first and fall back to the device default for the app targets.
+static id<MTLLibrary> niiDefaultMetalLibrary(id<MTLDevice> device, NSError **err) {
+    NSURL *url = [niiResourceBundle() URLForResource:@"default" withExtension:@"metallib"];
+    if (url) {
+        id<MTLLibrary> lib = [device newLibraryWithURL:url error:err];
+        if (lib) return lib;
+    }
+    return [device newDefaultLibrary];
+}
+
 #pragma mark - matrix helpers (column-major simd, M*v)
 
 static simd_float4x4 mtxIdentity(void) { return matrix_identity_float4x4; }
@@ -229,9 +253,11 @@ static simd_float3 computeLightDir(const NII_PREFS *p) {
     _queue = [_device newCommandQueue];
 
     NSError *libErr = nil;
-    id<MTLLibrary> lib = libraryURL
-        ? [_device newLibraryWithURL:libraryURL error:&libErr]
-        : [_device newDefaultLibrary];
+    id<MTLLibrary> lib = nil;
+    if (libraryURL)
+        lib = [_device newLibraryWithURL:libraryURL error:&libErr];
+    else
+        lib = niiDefaultMetalLibrary(_device, &libErr);
     if (!lib) { NSLog(@"NIIMetalRenderer: library load failed: %@", libErr); return nil; }
     id<MTLFunction> vfn = [lib newFunctionWithName:@"volumeVertex"];
     id<MTLFunction> ffn = [lib newFunctionWithName:@"volumeFragmentDefault"];
@@ -490,7 +516,7 @@ static simd_float3 computeLightDir(const NII_PREFS *p) {
 }
 
 - (void)loadMatcapFromBundle {
-    NSString *path = [[NSBundle mainBundle] pathForResource:@"00ShinyWhite" ofType:@"jpg"];
+    NSString *path = [niiResourceBundle() pathForResource:@"00ShinyWhite" ofType:@"jpg"];
     if (!path) return;
     CGImageSourceRef src = CGImageSourceCreateWithURL((__bridge CFURLRef)[NSURL fileURLWithPath:path], NULL);
     if (!src) return;

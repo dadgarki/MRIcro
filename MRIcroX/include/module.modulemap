@@ -1,0 +1,4 @@
+module MRIcroCore {
+    umbrella header "MRIcroCore.h"
+    export *
+}
