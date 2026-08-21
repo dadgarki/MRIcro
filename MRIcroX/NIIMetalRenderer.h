@@ -106,6 +106,22 @@ typedef struct {
 /// Upload an RGBA8 overlay volume into the overlay 3D texture (or clear when NULL).
 - (void)uploadOverlayVolume:(nullable const void *)data dims:(const int[_Nonnull 4])voxelDim;
 
+/// Replace a sub-box of an ALREADY UPLOADED volume, for data that changes faster than a
+/// whole-volume upload can keep up with (see nii_img's updateStreamingOverlay). `bytes`
+/// is tightly packed RGBA8 for the box, x fastest. No-op if the texture does not exist
+/// yet or the box lies outside it — callers fall back to the full path.
+/// Returns NO when nothing was uploaded.
+- (BOOL)replaceIntensityRegion:(const void *)bytes
+                        origin:(const int[_Nonnull 3])origin
+                          size:(const int[_Nonnull 3])size;
+- (BOOL)replaceOverlayRegion:(const void *)bytes
+                      origin:(const int[_Nonnull 3])origin
+                        size:(const int[_Nonnull 3])size;
+/// YES once both the intensity volume and (if overlays are loaded) the overlay volume
+/// exist, i.e. the region path has something to write into.
+@property (nonatomic, readonly) BOOL hasIntensityVolume;
+@property (nonatomic, readonly) BOOL hasOverlayVolume;
+
 /// YES once the Sobel gradient texture exists (needed by the advanced/matcap path).
 @property (nonatomic, readonly) BOOL hasGradients;
 

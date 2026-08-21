@@ -445,6 +445,41 @@ static simd_float3 computeLightDir(const NII_PREFS *p) {
     _overlayVolume = (data == NULL) ? nil : [self makeVolumeTextureFrom:data dims:voxelDim];
 }
 
+- (BOOL)hasIntensityVolume { return _intensityVolume != nil; }
+- (BOOL)hasOverlayVolume   { return _overlayVolume != nil; }
+
+// Partial upload into an existing 3D texture. The whole point is to avoid
+// makeVolumeTextureFrom's allocate-and-upload-everything for a small change.
+static BOOL niiReplaceRegion(id<MTLTexture> tex, const void *bytes,
+                             const int origin[3], const int size[3]) {
+    if (!tex || bytes == NULL) return NO;
+    if (size[0] < 1 || size[1] < 1 || size[2] < 1) return NO;
+    if (origin[0] < 0 || origin[1] < 0 || origin[2] < 0) return NO;
+    if ((NSUInteger)(origin[0] + size[0]) > tex.width ||
+        (NSUInteger)(origin[1] + size[1]) > tex.height ||
+        (NSUInteger)(origin[2] + size[2]) > tex.depth) return NO;
+    [tex replaceRegion:MTLRegionMake3D(origin[0], origin[1], origin[2],
+                                       size[0], size[1], size[2])
+           mipmapLevel:0
+                 slice:0
+             withBytes:bytes
+           bytesPerRow:(NSUInteger)size[0] * 4
+         bytesPerImage:(NSUInteger)size[0] * size[1] * 4];
+    return YES;
+}
+
+- (BOOL)replaceIntensityRegion:(const void *)bytes
+                        origin:(const int[3])origin
+                          size:(const int[3])size {
+    return niiReplaceRegion(_intensityVolume, bytes, origin, size);
+}
+
+- (BOOL)replaceOverlayRegion:(const void *)bytes
+                      origin:(const int[3])origin
+                        size:(const int[3])size {
+    return niiReplaceRegion(_overlayVolume, bytes, origin, size);
+}
+
 - (id<MTLTexture>)makeWritable3D:(NSUInteger)w h:(NSUInteger)h d:(NSUInteger)d {
     MTLTextureDescriptor *td = [[MTLTextureDescriptor alloc] init];
     td.textureType = MTLTextureType3D;

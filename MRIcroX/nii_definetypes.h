@@ -86,6 +86,16 @@ extern "C" {
         int renderAzimuth, renderElevation, renderSlices, clipAzimuth,clipElevation,clipDepth, rayCastQuality1to4, renderWid, renderHt, renderLeft, renderBottom, displayModeGL;
         bool showCube, rayCastViewCenteredLight;
         #endif
+        // --- streaming overlay support (updateStreamingOverlay) ---------------------
+        // An overlay change normally forces force_recalcGL: a full rescale of the
+        // background, a full RGBA rebuild, and a whole-volume texture upload. For data
+        // that changes many times a second (a live simulation, say) that is far too
+        // expensive, so the streaming path keeps the background's 8-bit rescale around
+        // and re-composes only the sub-box the new data touches.
+        THIS_UINT8 *cached8bit;   //background rescaled to 8-bit, kept between overlay updates
+        size_t cached8bitVox;     //voxels cached8bit was sized for (0 = none)
+        bool force_overlayGL;     //re-compose overlayDirty* only, instead of everything
+        int overlayDirtyLo[3], overlayDirtyHi[3]; //inclusive voxel box to re-compose
         int numDtiV;
         float dtiV[MAX_DTIvectors][3];
         float histo[MAX_HISTO_BINS];

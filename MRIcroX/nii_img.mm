@@ -1855,6 +1855,127 @@ void blendOverlays(NII_PREFS* prefs, uint32_t *data)
 }
 
 
+// ---------------------------------------------------------------------------------
+// Streaming overlays.
+//
+// The normal overlay path (addOverlay) rebuilds everything: rescale the background to
+// 8-bit, map it through the LUT, rescale and colour every overlay, blend, and upload two
+// whole-volume textures. That is fine for loading a stat map once and far too expensive
+// for data that changes many times a second — a running simulation, say — where it caps
+// the update rate and stalls the UI on every frame.
+//
+// The streaming path keeps the background's 8-bit rescale (cached8bit, refreshed by
+// recalcGL whenever the background itself changes) and re-composes only the voxel box the
+// new data touches, uploading that box into the existing textures.
+// ---------------------------------------------------------------------------------
+
+void cacheBackground8bit(NII_PREFS* prefs, const THIS_UINT8 *img8bit) {
+    size_t nvox = prefs->numVox3D;
+    if (nvox < 1) return;
+    if (prefs->cached8bitVox != nvox) {
+        free(prefs->cached8bit);
+        prefs->cached8bit = (THIS_UINT8 *) malloc(nvox);
+        prefs->cached8bitVox = (prefs->cached8bit == NULL) ? 0 : nvox;
+    }
+    if (prefs->cached8bit) memcpy(prefs->cached8bit, img8bit, nvox);
+}
+
+void freeCached8bit(NII_PREFS* prefs) {
+    free(prefs->cached8bit);
+    prefs->cached8bit = NULL;
+    prefs->cached8bitVox = 0;
+}
+
+// Re-compose prefs->overlayDirty* and upload just that box. Returns false when the
+// preconditions are missing (no cache, no textures yet), in which case the caller must
+// fall back to the full rebuild.
+bool refreshOverlayRegionGL(NII_PREFS* prefs) {
+    if (!prefs->cached8bit || prefs->cached8bitVox != prefs->numVox3D) return false;
+    if (!gCurrentRenderer || ![gCurrentRenderer hasIntensityVolume]) return false;
+    const int nx = prefs->voxelDim[1], ny = prefs->voxelDim[2], nz = prefs->voxelDim[3];
+    int lo[3], hi[3];
+    for (int d = 0; d < 3; d++) {
+        lo[d] = prefs->overlayDirtyLo[d];
+        hi[d] = prefs->overlayDirtyHi[d];
+    }
+    const int dim[3] = {nx, ny, nz};
+    for (int d = 0; d < 3; d++) {
+        if (lo[d] < 0) lo[d] = 0;
+        if (hi[d] > dim[d] - 1) hi[d] = dim[d] - 1;
+        if (lo[d] > hi[d]) return false; //empty box: nothing to do
+    }
+    const int size[3] = {hi[0]-lo[0]+1, hi[1]-lo[1]+1, hi[2]-lo[2]+1};
+    const size_t boxVox = (size_t)size[0] * size[1] * size[2];
+
+    int numOverlay = 0;
+    for (int i = 0; i < MAX_OVERLAY; i++)
+        if (prefs->overlays[i].datatype != DT_NONE) numOverlay++;
+    prefs->numOverlay = numOverlay;
+
+    uint32_t *base = new uint32_t[boxVox];
+    // Background colours for the box, straight from the cached rescale.
+    {
+        size_t k = 0;
+        for (int z = lo[2]; z <= hi[2]; z++)
+            for (int y = lo[1]; y <= hi[1]; y++) {
+                const size_t row = (size_t)z * nx * ny + (size_t)y * nx;
+                for (int x = lo[0]; x <= hi[0]; x++)
+                    base[k++] = prefs->lut[prefs->cached8bit[row + x]];
+            }
+    }
+
+    uint32_t *over = NULL;
+    if (numOverlay > 0 && prefs->overlayFrac != 0) {
+        over = new uint32_t[boxVox];
+        THIS_UINT8 *row8 = (THIS_UINT8 *) malloc(size[0]);
+        int seen = 0;
+        for (int i = 0; i < MAX_OVERLAY; i++) {
+            if (prefs->overlays[i].datatype == DT_NONE) continue;
+            seen++;
+            tRGBAlut lut;
+            createlut(prefs->overlays[i].colorScheme, lut, prefs->overlays[i].lut_bias);
+            createlut(prefs->overlays[i].colorScheme, prefs->overlays[i].lut, prefs->overlays[i].lut_bias);
+            double minRaw = nii_cal2raw(prefs->overlays[i].scl_inter, prefs->overlays[i].scl_slope, prefs->overlays[i].viewMin);
+            double maxRaw = nii_cal2raw(prefs->overlays[i].scl_inter, prefs->overlays[i].scl_slope, prefs->overlays[i].viewMax);
+            if ((minRaw < 0.0) && (maxRaw < 0.0)) { //reverse polarity, as blendOverlays does
+                for (int c = 0; c < 256; c++) lut[255-c] = prefs->overlays[i].lut[c];
+                for (int c = 0; c < 256; c++) prefs->overlays[i].lut[c] = lut[c];
+            }
+            uint32_t *dst = (seen == 1) ? over : new uint32_t[boxVox];
+            size_t k = 0;
+            // rescale8bit one x-run at a time: it already handles every datatype, and a
+            // run is contiguous in the source volume.
+            for (int z = lo[2]; z <= hi[2]; z++)
+                for (int y = lo[1]; y <= hi[1]; y++) {
+                    const size_t row = (size_t)z * nx * ny + (size_t)y * nx + lo[0];
+                    rescale8bit(prefs->overlays[i].data, size[0], row,
+                                prefs->overlays[i].datatype, minRaw, maxRaw, row8);
+                    for (int x = 0; x < size[0]; x++) dst[k++] = lut[row8[x]];
+                }
+            if (seen > 1) {
+                computeBlendEither(over, dst, boxVox, 0.5); //matches blendOverlays
+                delete[] dst;
+            }
+        }
+        free(row8);
+        computeBlend(base, over, boxVox, prefs->overlayFrac);
+    }
+
+    const int origin[3] = {lo[0], lo[1], lo[2]};
+    bool ok = [gCurrentRenderer replaceIntensityRegion:base origin:origin size:size];
+    if (ok && over) {
+        if (![gCurrentRenderer hasOverlayVolume]) {
+            ok = false; //no overlay texture yet: the full path has to create it
+        } else {
+            [gCurrentRenderer replaceOverlayRegion:over origin:origin size:size];
+        }
+    }
+    delete[] base;
+    delete[] over;
+    if (ok) [gCurrentRenderer recomputeGradients];
+    return ok;
+}
+
 void recalcSubGL(NII_PREFS* prefs, THIS_UINT8 *img8bit, tRGBAlut lut)
 //makes a volume with size Sz1*kSz2*kSz3 voxels
 {
@@ -2006,6 +2127,7 @@ int recalcGL(FSLIO* fslio, NII_PREFS* prefs)
             volOffset = 1;
         volOffset = prefs->numVox3D* (volOffset-1);
         rescale8bit(fslio->niftiptr->data, prefs->numVox3D, volOffset, fslio->niftiptr->datatype, minRaw, maxRaw, img8bit);
+        cacheBackground8bit(prefs, img8bit); //lets updateStreamingOverlay skip this pass
         recalcSubGL(prefs,img8bit, prefs->lut);
         free(img8bit);
     }
@@ -2490,8 +2612,15 @@ double  defuzzz(double x) {
     }
     NIIMetalRenderer *r = (NIIMetalRenderer *)_metalRenderer;
     gCurrentRenderer = r; // recalc upload hooks feed THIS window's renderer
+    if (prefs->force_overlayGL && !prefs->force_recalcGL) {
+        // Streaming overlay update: re-compose just the changed box. Falls back to the
+        // full rebuild if the cache or the textures are not in place yet.
+        prefs->force_overlayGL = false;
+        if (!refreshOverlayRegionGL(prefs)) prefs->force_recalcGL = true;
+    }
     if (prefs->force_recalcGL) {
         prefs->force_recalcGL = false;
+        prefs->force_overlayGL = false;
         recalcGL(fslio, prefs);
         scrnSize(prefs);
         #ifdef NII_IMG_RENDER
@@ -3135,6 +3264,7 @@ void closeOverlays (NII_PREFS* prefs)
 {
     FslClose(fslio);
     closeOverlays(prefs);
+    freeCached8bit(prefs);
     [labelArray removeAllObjects];
     prefs->currentVolume = 1;
     fslio = FslInit();
@@ -3400,9 +3530,145 @@ void closeOverlays (NII_PREFS* prefs)
     return fslio;
 }
 
+// Streaming overlay: reslice `data` (a float volume in world/mm space) into an overlay
+// slot and mark only the box it covers for re-composition. See the streaming-overlay
+// notes above refreshOverlayRegionGL for why this exists.
+- (int) updateStreamingOverlay: (int) slot
+                     floatData: (const float *) data
+                          dims: (const int *) dims
+                     spacingMM: (const float *) spacingMM
+                      originMM: (const float *) originMM
+{
+    if (slot < 0 || slot >= MAX_OVERLAY) return -1;
+    if (data == NULL || dims == NULL || spacingMM == NULL || originMM == NULL) return -1;
+    if (dims[0] < 1 || dims[1] < 1 || dims[2] < 1) return -1;
+    if (prefs->numVox3D < 1) return -1;
+    if (fslio->niftiptr->datatype == DT_NONE) return -1; //no background to overlay onto
+    for (int d = 0; d < 3; d++) if (spacingMM[d] == 0) return -1;
+
+    NII_OVERLAY *ov = &prefs->overlays[slot];
+    const size_t nvox = prefs->numVox3D;
+    if (ov->datatype != NIFTI_TYPE_FLOAT32 || ov->data == NULL) {
+        // Taking over the slot: whatever was here (a loaded stat map) is replaced.
+        if (ov->datatype != DT_NONE) free(ov->data);
+        ov->data = calloc(nvox, sizeof(float));
+        if (ov->data == NULL) { ov->datatype = DT_NONE; return -1; }
+        ov->datatype = NIFTI_TYPE_FLOAT32;
+        ov->scl_slope = 1.0f;
+        ov->scl_inter = 0.0f;
+        ov->lut_bias = 0.5f;
+        ov->colorScheme = slot + 3;
+        ov->fullMin = 0.0; ov->fullMax = 1.0;
+        ov->nearMin = 0.0; ov->nearMax = 1.0;
+        ov->viewMin = 0.0; ov->viewMax = 1.0;
+    }
+    float *dst = (float *) ov->data;
+
+    // Destination box: the source's corners pushed through world -> background voxels.
+    const int nx = prefs->voxelDim[1], ny = prefs->voxelDim[2], nz = prefs->voxelDim[3];
+    mat44 toVox = prefs->sto_ijk;
+    int lo[3] = {nx, ny, nz}, hi[3] = {-1, -1, -1};
+    for (int c = 0; c < 8; c++) {
+        float srcIdx[3] = { (c & 1) ? (float)(dims[0]-1) : 0.0f,
+                            (c & 2) ? (float)(dims[1]-1) : 0.0f,
+                            (c & 4) ? (float)(dims[2]-1) : 0.0f };
+        float mm[3];
+        for (int d = 0; d < 3; d++) mm[d] = originMM[d] + srcIdx[d] * spacingMM[d];
+        for (int d = 0; d < 3; d++) {
+            double v = toVox.m[d][0]*mm[0] + toVox.m[d][1]*mm[1] + toVox.m[d][2]*mm[2] + toVox.m[d][3];
+            int iv = (int) floor(v);
+            if (iv - 1 < lo[d]) lo[d] = iv - 1;
+            if (iv + 1 > hi[d]) hi[d] = iv + 1;
+        }
+    }
+    const int dim[3] = {nx, ny, nz};
+    for (int d = 0; d < 3; d++) {
+        if (lo[d] < 0) lo[d] = 0;
+        if (hi[d] > dim[d] - 1) hi[d] = dim[d] - 1;
+        if (lo[d] > hi[d]) return -1; //source lies outside the background
+    }
+
+    // Anything previously written outside the new box would linger, so re-compose the
+    // union of the two and clear the part the new data does not cover.
+    int unionLo[3], unionHi[3];
+    bool hadBox = prefs->overlayDirtyHi[0] >= prefs->overlayDirtyLo[0];
+    for (int d = 0; d < 3; d++) {
+        unionLo[d] = hadBox ? MIN(lo[d], prefs->overlayDirtyLo[d]) : lo[d];
+        unionHi[d] = hadBox ? MAX(hi[d], prefs->overlayDirtyHi[d]) : hi[d];
+        if (unionLo[d] < 0) unionLo[d] = 0;
+        if (unionHi[d] > dim[d] - 1) unionHi[d] = dim[d] - 1;
+    }
+
+    // One row of the box per work item: the reslice is the dominant cost of a streaming
+    // update, and it is embarrassingly parallel (each destination voxel is written once).
+    mat44 toMM = prefs->sto_xyz;
+    const int rowsY = unionHi[1] - unionLo[1] + 1;
+    const int rowsZ = unionHi[2] - unionLo[2] + 1;
+    // Scalars, not the arrays: a block cannot capture a C array by value.
+    const int uLo0 = unionLo[0], uLo1 = unionLo[1], uLo2 = unionLo[2];
+    const int uHi0 = unionHi[0];
+    const int sDim0 = dims[0], sDim1 = dims[1], sDim2 = dims[2];
+    const float sOrg0 = originMM[0], sOrg1 = originMM[1], sOrg2 = originMM[2];
+    const float sSpc0 = spacingMM[0], sSpc1 = spacingMM[1], sSpc2 = spacingMM[2];
+    dispatch_apply(rowsZ * rowsY, DISPATCH_APPLY_AUTO, ^(size_t row_i) {
+        const int z = uLo2 + (int)(row_i / rowsY);
+        const int y = uLo1 + (int)(row_i % rowsY);
+        {
+            const size_t row = (size_t)z * nx * ny + (size_t)y * nx;
+            for (int x = uLo0; x <= uHi0; x++) {
+                const float mm0 = toMM.m[0][0]*x + toMM.m[0][1]*y + toMM.m[0][2]*z + toMM.m[0][3];
+                const float mm1 = toMM.m[1][0]*x + toMM.m[1][1]*y + toMM.m[1][2]*z + toMM.m[1][3];
+                const float mm2 = toMM.m[2][0]*x + toMM.m[2][1]*y + toMM.m[2][2]*z + toMM.m[2][3];
+                // World -> source index (the source grid is axis-aligned by contract).
+                const float f[3] = {(mm0 - sOrg0) / sSpc0, (mm1 - sOrg1) / sSpc1,
+                                    (mm2 - sOrg2) / sSpc2};
+                float value = 0.0f;
+                if (f[0] >= 0 && f[1] >= 0 && f[2] >= 0 &&
+                    f[0] <= sDim0-1 && f[1] <= sDim1-1 && f[2] <= sDim2-1) {
+                    int i0 = (int)f[0], j0 = (int)f[1], k0 = (int)f[2];
+                    int i1 = MIN(i0+1, sDim0-1), j1 = MIN(j0+1, sDim1-1), k1 = MIN(k0+1, sDim2-1);
+                    float fx = f[0]-i0, fy = f[1]-j0, fz = f[2]-k0;
+                    #define NII_SRC(ii,jj,kk) data[(size_t)(kk)*sDim0*sDim1 + (size_t)(jj)*sDim0 + (ii)]
+                    float c00 = NII_SRC(i0,j0,k0)*(1-fx) + NII_SRC(i1,j0,k0)*fx;
+                    float c10 = NII_SRC(i0,j1,k0)*(1-fx) + NII_SRC(i1,j1,k0)*fx;
+                    float c01 = NII_SRC(i0,j0,k1)*(1-fx) + NII_SRC(i1,j0,k1)*fx;
+                    float c11 = NII_SRC(i0,j1,k1)*(1-fx) + NII_SRC(i1,j1,k1)*fx;
+                    #undef NII_SRC
+                    float c0 = c00*(1-fy) + c10*fy, c1 = c01*(1-fy) + c11*fy;
+                    value = c0*(1-fz) + c1*fz;
+                }
+                dst[row + x] = value;
+            }
+        }
+    });
+
+    for (int d = 0; d < 3; d++) {
+        prefs->overlayDirtyLo[d] = unionLo[d];
+        prefs->overlayDirtyHi[d] = unionHi[d];
+    }
+    prefs->force_overlayGL = true;
+    prefs->force_refreshGL = true;
+    return slot;
+}
+
 - (void) closeAllOverlays
 {
     closeOverlays(prefs);
+    prefs->overlayDirtyLo[0] = 0; prefs->overlayDirtyHi[0] = -1; //no streaming box
+    prefs->force_overlayGL = false;
+    prefs->force_refreshGL = true;
+    prefs->force_recalcGL = true;
+}
+
+// Free ONE slot, so a layer that is reloaded often (a file-backed overlay) can be
+// replaced without discarding a streaming layer in another slot.
+- (void) closeOverlay: (int) slot
+{
+    if ((slot < 0) || (slot >= MAX_OVERLAY)) return;
+    if (prefs->overlays[slot].datatype == DT_NONE) return;
+    free(prefs->overlays[slot].data);
+    prefs->overlays[slot].data = NULL;
+    prefs->overlays[slot].datatype = DT_NONE;
     prefs->force_refreshGL = true;
     prefs->force_recalcGL = true;
 }
@@ -3542,6 +3808,11 @@ void closeOverlays (NII_PREFS* prefs)
         prefs->colorBarBorderPx = 2; // 1/2%
 
         //x prefs->colorBarBorder = 0.002; // 1/2%
+        prefs->cached8bit = NULL;
+        prefs->cached8bitVox = 0;
+        prefs->force_overlayGL = false;
+        prefs->overlayDirtyLo[0] = 0; //empty box: hi < lo, so the first streaming update
+        prefs->overlayDirtyHi[0] = -1; //  does not union with the volume's origin
         prefs->busyGL = FALSE; //prepared for drawing
         prefs->updatedTimeline = FALSE;
         prefs->numDtiV = 0;

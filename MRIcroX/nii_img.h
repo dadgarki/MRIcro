@@ -61,10 +61,25 @@
 -(bool) doRedraw; //redraw screen - returns true if any changes were required
 -(int)  nextOverlaySlot; //returns -1 if unable to load another overlay
 -(int)  addOverlay: (NSString *) file_name;
+/// Overlay for data that changes continuously (a running simulation, a live filter).
+/// Reslices `floatData` — a float32 volume on its own axis-aligned grid, positioned in
+/// the background's world (mm) space by spacingMM/originMM — into `slot`, and marks only
+/// the covered box for re-composition, so the cost tracks the box rather than the whole
+/// volume. addOverlay, by contrast, reloads and re-uploads everything on every change.
+/// The slot is taken over: any overlay already loaded there is discarded.
+/// Returns the slot, or -1.
+- (int) updateStreamingOverlay: (int) slot
+                     floatData: (const float *) floatData
+                          dims: (const int *) dims
+                     spacingMM: (const float *) spacingMM
+                      originMM: (const float *) originMM;
 -(GraphStruct) getTimeline;
 
 -(bool) isTimelineUpdateNeeded;
 -(void) closeAllOverlays;
+/// Free one overlay slot (see closeAllOverlays for the rest). Lets a file-backed layer
+/// be reloaded without discarding a streaming layer in another slot.
+-(void) closeOverlay: (int) slot;
 -(void) getBackgroundColor:(double*)red Green:(double*)green Blue:(double*)blue;
 -(void) getSuggestedViewMinMax: (double*) min Max: (double*) max;//suggested image range excluding outliers
 -(void) getViewMinMax: (double*) min Max: (double*) max; //currently displayed values
