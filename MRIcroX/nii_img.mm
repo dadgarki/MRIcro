@@ -1017,7 +1017,8 @@ int createlutX(int colorscheme, uint32_t* lut) {
             nodes[1] = makeRGBAnode(0,255,0,128,256);
             break;
         case 14: //14=blue
-            nodes[1] = makeRGBAnode(0,0,255,128,256); 
+            nodes[1] = makeRGBAnode(0,0,255,128,256);
+            break;
         case 15: //15=cividis
             numNodes = 4;
             nodes[0] = makeRGBAnode(0,32,76,0,0);
@@ -1092,6 +1093,23 @@ int createlutX(int colorscheme, uint32_t* lut) {
             //nodes[0] = makeRGBAnode(0,0,0,0,0);
             nodes[1] = makeRGBAnode(134,109,101,60,128);
             nodes[2] = makeRGBAnode(255,250,245,148,256);
+            break;
+        case 26: //magma (matplotlib, sampled at 0, .25, .5, .75, 1)
+            numNodes = 5;
+            nodes[0] = makeRGBAnode(0,0,4,0,0);
+            nodes[1] = makeRGBAnode(81,18,124,48,64);
+            nodes[2] = makeRGBAnode(183,55,121,72,128);
+            nodes[3] = makeRGBAnode(252,136,97,84,192);
+            nodes[4] = makeRGBAnode(252,253,191,88,256);
+            break;
+        case 27: //jet (MATLAB/matplotlib rainbow)
+            numNodes = 6;
+            nodes[0] = makeRGBAnode(0,0,131,0,0);
+            nodes[1] = makeRGBAnode(0,0,255,40,32);
+            nodes[2] = makeRGBAnode(0,255,255,64,96);
+            nodes[3] = makeRGBAnode(255,255,0,80,160);
+            nodes[4] = makeRGBAnode(255,0,0,88,224);
+            nodes[5] = makeRGBAnode(128,0,0,88,256);
             break;
     }
     for (int i = 1; i < numNodes; i++)
