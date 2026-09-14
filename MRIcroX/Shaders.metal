@@ -47,6 +47,7 @@ struct VolumeUniforms {
     float      brighten;       // advanced MR (default 1.5)
     float      surfaceColor;   // advanced MR (default 1.0)
     float      backAlpha;      // advanced MR (default 0.95)
+    float      volumeOpacity;  // advanced MR: per-sample opacity scale, 1 = as authored
     float      ambient;        // advanced CT (default 0.8)
     float      diffuse;        // advanced CT (default 0.3)
     float      specular;       // advanced CT (default 0.1)
@@ -266,7 +267,7 @@ fragment float4 volumeFragmentAdvancedMR(VertexOut in [[stage_in]],
         while (samplePos.a <= stepSizeX2) {
             colorSample = intensityVol.sample(volSampler, samplePos.xyz);
             colorSample.a = 1.0 - pow(1.0 - colorSample.a, opacityCorrection);
-            colorSample.a = clamp(colorSample.a * 3.0, 0.0, 1.0);
+            colorSample.a = clamp(colorSample.a * 3.0, 0.0, 1.0) * u.volumeOpacity;
             colorSample.rgb *= colorSample.a;
             colAcc = (1.0 - colAcc.a) * colorSample + colAcc;
             samplePos += deltaDir;
@@ -279,7 +280,10 @@ fragment float4 volumeFragmentAdvancedMR(VertexOut in [[stage_in]],
     while (samplePos.a <= len) {
         colorSample = intensityVol.sample(volSampler, samplePos.xyz);
         if (colorSample.a > 0.0) {
-            colorSample.a = 1.0 - pow(1.0 - colorSample.a, opacityCorrection);
+            // Per-sample opacity scale: below 1 the ray keeps going through tissue
+            // it would otherwise stop at, so structure and overlays deeper in the
+            // head show through the skin (volume transparency).
+            colorSample.a = (1.0 - pow(1.0 - colorSample.a, opacityCorrection)) * u.volumeOpacity;
             if (nHit < 1) { nHit++; bgNearest = samplePos.a; }
             gradSample = gradientVol.sample(volSampler, samplePos.xyz);
             gradSample.rgb = normalize(gradSample.rgb * 2.0 - 1.0);

@@ -46,6 +46,7 @@ typedef struct {
     float         brighten;
     float         surfaceColor;
     float         backAlpha;
+    float         volumeOpacity;
     float         ambient;
     float         diffuse;
     float         specular;

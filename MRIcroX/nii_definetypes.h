@@ -76,7 +76,8 @@ extern "C" {
         //bool retinaResolution;
         bool dicomWarn, force_refreshGL, force_recalcGL, busyGL, updatedTimeline, showInfo, showOrient, orthoOrient,loadFewVolumes,  advancedRender, viewRadiological, isSmooth2D;
         float overlayFrac; //, colorBarBorder;
-        float backAlpha; //opacity of the volume in the advanced render, 0..1 (default 0.95); <= 0 keeps the default
+        float backAlpha; //final alpha of the advanced render, 0..1 (default 0.95); <= 0 keeps the default
+        float volumeOpacity; //per-sample opacity scale of the advanced MR render, 0..1 (default 1 = as authored); <= 0 keeps the default
         int colorBarBorderPx;
         NII_OVERLAY overlays[MAX_OVERLAY];
         #ifdef NII_IMG_RENDER //from nii_definetypes.h

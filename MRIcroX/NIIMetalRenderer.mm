@@ -889,6 +889,9 @@ static BOOL niiReplaceRegion(id<MTLTexture> tex, const void *bytes,
     // (the advanced shader scales the accumulated alpha by it, and the volume pass
     // blends against the clear colour). Unset/invalid keeps the historical 0.95.
     u.backAlpha    = (p->backAlpha > 0.0f && p->backAlpha <= 1.0f) ? p->backAlpha : 0.95f;
+    // Per-sample opacity of the volume in the advanced MR render (see Shaders.metal);
+    // unset/invalid renders as authored.
+    u.volumeOpacity = (p->volumeOpacity > 0.0f && p->volumeOpacity <= 1.0f) ? p->volumeOpacity : 1.0f;
     // advanced CT defaults (advanced_CT_shader.frag)
     u.ambient      = 0.8f;
     u.diffuse      = 0.3f;
