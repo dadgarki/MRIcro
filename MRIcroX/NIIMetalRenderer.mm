@@ -885,7 +885,10 @@ static BOOL niiReplaceRegion(id<MTLTexture> tex, const void *bytes,
     // advanced MR defaults (advanced_MR_shader.frag)
     u.brighten     = 1.5f;
     u.surfaceColor = 1.0f;
-    u.backAlpha    = 0.95f;
+    // Volume opacity: a host can lower prefs->backAlpha to see through the anatomy
+    // (the advanced shader scales the accumulated alpha by it, and the volume pass
+    // blends against the clear colour). Unset/invalid keeps the historical 0.95.
+    u.backAlpha    = (p->backAlpha > 0.0f && p->backAlpha <= 1.0f) ? p->backAlpha : 0.95f;
     // advanced CT defaults (advanced_CT_shader.frag)
     u.ambient      = 0.8f;
     u.diffuse      = 0.3f;

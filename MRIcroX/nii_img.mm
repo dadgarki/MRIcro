@@ -3823,6 +3823,7 @@ void closeOverlays (NII_PREFS* prefs)
         prefs->colorBarPos[3] = 0.98;  //top
         prefs->xBarGap = 3;
         prefs->overlayFrac = 0.5;
+        prefs->backAlpha = 0.95;
         prefs->colorBarBorderPx = 2; // 1/2%
 
         //x prefs->colorBarBorder = 0.002; // 1/2%
